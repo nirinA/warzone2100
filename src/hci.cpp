@@ -83,6 +83,9 @@
 #include "keybind.h"
 #include "qtscript.h"
 
+// Is a button widget highlighted, either because the cursor is over it or it is flashing.
+//
+#define buttonIsHilite(p)  ((p->getState() & WBUT_HIGHLIGHT) != 0)
 
 // Empty edit window
 static bool SecondaryWindowUp = false;
@@ -370,8 +373,6 @@ static DROID *CurrentDroid = NULL;
 static DROID_TYPE CurrentDroidType = DROID_ANY;
 
 /******************Power Bar Stuff!**************/
-/* Add the power bars */
-static bool intAddPower(void);
 
 /* Set the shadow for the PowerBar */
 static void intRunPower(void);
@@ -401,9 +402,101 @@ static SDWORD intNumSelectedDroids(UDWORD droidType);
 
 /***************************GAME CODE ****************************/
 
+struct RETBUTSTATS
+{
+	int downTime;
+	QString filename;
+	QString filenameDown;
+	QString tip;
+	int flashing;
+	int flashTime;
+};
+static RETBUTSTATS retbutstats[NUMRETBUTS];
+
+void setReticuleStats(int ButId, QString tip, QString filename, QString filenameDown)
+{
+	retbutstats[ButId].tip = tip;
+	retbutstats[ButId].filename = filename;
+	retbutstats[ButId].filenameDown = filenameDown;
+	retbutstats[ButId].downTime = 0;
+	retbutstats[ButId].flashing = 0;
+	retbutstats[ButId].flashTime = 0;
+}
+
+static void intDisplayReticuleButton(WIDGET *psWidget, UDWORD xOffset, UDWORD yOffset)
+{
+	int     x = xOffset + psWidget->x();
+	int     y = yOffset + psWidget->y();
+	bool	Hilight = false;
+	bool	Down = false;
+	UBYTE	DownTime = retbutstats[psWidget->UserData].downTime;
+	UBYTE	flashing = retbutstats[psWidget->UserData].flashing;
+	UBYTE	flashTime = retbutstats[psWidget->UserData].flashTime;
+	ASSERT(psWidget->type == WIDG_BUTTON, "Not a button");
+	W_BUTTON *psButton = (W_BUTTON *)psWidget;
+
+	if (psButton->state & WBUT_DISABLE)
+	{
+		iV_DrawImage(IntImages, IMAGE_RETICULE_GREY, x, y);
+		return;
+	}
+
+	Down = psButton->state & (WBUT_DOWN | WBUT_CLICKLOCK);
+	Hilight = buttonIsHilite(psButton);
+
+	if (Down)
+	{
+		if ((DownTime < 1) && (psWidget->UserData != RETBUT_CANCEL))
+		{
+			iV_DrawImage(IntImages, IMAGE_RETICULE_BUTDOWN, x, y);
+		}
+		else
+		{
+			iV_DrawImage2(retbutstats[psWidget->UserData].filenameDown, x, y);
+		}
+		DownTime++;
+		flashing = false;	// stop the reticule from flashing if it was
+	}
+	else
+	{
+		if (flashing)
+		{
+			if (((realTime / 250) % 2) != 0)
+			{
+				iV_DrawImage2(retbutstats[psWidget->UserData].filenameDown, x, y);
+				flashTime = 0;
+			}
+			else
+			{
+				iV_DrawImage2(retbutstats[psWidget->UserData].filename, x, y);
+			}
+			flashTime++;
+		}
+		else
+		{
+			iV_DrawImage2(retbutstats[psWidget->UserData].filename, x, y);
+			DownTime = 0;
+		}
+	}
+	if (Hilight)
+	{
+		if (psWidget->UserData == RETBUT_CANCEL)
+		{
+			iV_DrawImage(IntImages, IMAGE_CANCEL_HILIGHT, x, y);
+		}
+		else
+		{
+			iV_DrawImage(IntImages, IMAGE_RETICULE_HILIGHT, x, y);
+		}
+	}
+	retbutstats[psWidget->UserData].flashTime = flashTime;
+	retbutstats[psWidget->UserData].flashing = flashing;
+	retbutstats[psWidget->UserData].downTime = DownTime;
+}
+
 // Set the x,y members of a button widget initialiser given a reticule button index.
 //
-static void setReticuleBut(UWORD ButId, const char *tip, INTFAC_TYPE image, int style)
+void setReticuleBut(int ButId)
 {
 	/* Default button data */
 	W_BUTINIT sButInit;
@@ -411,13 +504,15 @@ static void setReticuleBut(UWORD ButId, const char *tip, INTFAC_TYPE image, int 
 	sButInit.id = ReticuleEnabled[ButId].id;
 	sButInit.width = RET_BUTWIDTH;
 	sButInit.height = RET_BUTHEIGHT;
-	sButInit.style = WBUT_PLAIN;
 	sButInit.pDisplay = intDisplayReticuleButton;
 	sButInit.x = ReticuleOffsets[ButId].x + RETXOFFSET;
 	sButInit.y = ReticuleOffsets[ButId].y + RETYOFFSET;
-	sButInit.pTip = tip;
-	sButInit.UserData = image;
-	sButInit.style = style;
+	sButInit.pTip = retbutstats[ButId].tip;
+	sButInit.style = WBUT_SECONDARY;
+	sButInit.UserData = ButId;
+	retbutstats[ButId].downTime = 0;
+	retbutstats[ButId].flashing = 0;
+	retbutstats[ButId].flashTime = 0;
 	if (!widgAddButton(psWScreen, &sButInit))
 	{
 		debug(LOG_ERROR, "Failed to add reticule button");
@@ -434,14 +529,7 @@ bool intInitialise(void)
 
 	widgSetTipColour(WZCOL_TOOLTIP_TEXT);
 
-	if (GetGameMode() == GS_NORMAL)
-	{
-		WidgSetAudio(WidgetAudioCallback, -1, ID_SOUND_SELECT);
-	}
-	else
-	{
-		WidgSetAudio(WidgetAudioCallback, -1, ID_SOUND_SELECT);
-	}
+	WidgSetAudio(WidgetAudioCallback, -1, ID_SOUND_SELECT);
 
 	/* Create storage for Structures that can be built */
 	apsStructStatsList = (STRUCTURE_STATS **)malloc(sizeof(STRUCTURE_STATS *) * MAXSTRUCTURES);
@@ -475,12 +563,6 @@ bool intInitialise(void)
 
 	if (GetGameMode() == GS_NORMAL)
 	{
-
-		if (!intAddReticule())
-		{
-			debug(LOG_ERROR, "Couldn't create reticule widgets (Out of memory ?)");
-			return false;
-		}
 		if (!intAddPower())
 		{
 			debug(LOG_ERROR, "Couldn't create power Bar widget(Out of memory ?)");
@@ -717,7 +799,7 @@ static void intDoScreenRefresh(void)
 
 
 //hides the power bar from the display
-static void intHidePowerBar(void)
+void intHidePowerBar()
 {
 	//only hides the power bar if the player has requested no power bar
 	if (!powerBarUp)
@@ -990,6 +1072,8 @@ static void intProcessEditStats(UDWORD id)
 			debugMenuDroidDeliveryPoint.factoryType = REPAIR_FLAG;
 			debugMenuDroidDeliveryPoint.factoryInc = 0;
 			debugMenuDroidDeliveryPoint.player = selectedPlayer;
+			debugMenuDroidDeliveryPoint.selected = false;
+			debugMenuDroidDeliveryPoint.psNext = NULL;
 			startDeliveryPosition(&debugMenuDroidDeliveryPoint);
 		}
 		else
@@ -1493,7 +1577,7 @@ INT_RETVAL intRunWidgets(void)
 						Cheated = true;
 						// Notify the other hosts that we've just built ourselves a feature
 						//sendMultiPlayerFeature(result->psStats->subType, result->pos.x, result->pos.y, result->id);
-						sendMultiPlayerFeature(((FEATURE_STATS *)psPositionStats)->subType, world_coord(structX), world_coord(structY), generateNewObjectId());
+						sendMultiPlayerFeature(((FEATURE_STATS *)psPositionStats)->ref, world_coord(structX), world_coord(structY), generateNewObjectId());
 					}
 					else if (psPositionStats->ref >= REF_TEMPLATE_START &&
 					        psPositionStats->ref < REF_TEMPLATE_START + REF_RANGE)
@@ -1830,7 +1914,7 @@ static void intProcessObject(UDWORD id)
 		{
 			statButID = id;
 		}
-		if (psObj->selected)
+		if (psObj && psObj->selected)
 		{
 			psObj->selected = false;
 			widgSetButtonState(psWScreen, statButID, 0);
@@ -1950,6 +2034,7 @@ static void intProcessObject(UDWORD id)
 		{
 			/* Find the object that the stats ID refers to */
 			psObj = intGetObject(id);
+			ASSERT_OR_RETURN(, psObj, "Missing referred to object id %u", id);
 
 			intResetWindows(psObj);
 
@@ -2674,22 +2759,14 @@ bool intAddReticule()
 	{
 		return true; // all fine 
 	}
-
 	WIDGET *parent = psWScreen->psForm;
-
-	/* Create the basic form */
 	IntFormAnimated *retForm = new IntFormAnimated(parent, false);
 	retForm->id = IDRET_FORM;
 	retForm->setGeometry(RET_X, RET_Y, RET_FORMWIDTH, RET_FORMHEIGHT);
-
-	// normal reticule
-	setReticuleBut(RETBUT_COMMAND, _("Commanders (F6)"), IMAGE_COMMANDDROID_UP, WBUT_PLAIN);
-	setReticuleBut(RETBUT_INTELMAP, _("Intelligence Display (F5)"), IMAGE_INTELMAP_UP, WBUT_SECONDARY);
-	setReticuleBut(RETBUT_FACTORY, _("Manufacture (F1)"), IMAGE_MANUFACTURE_UP, WBUT_SECONDARY);
-	setReticuleBut(RETBUT_DESIGN, _("Design (F4)"), IMAGE_DESIGN_UP, WBUT_PLAIN);
-	setReticuleBut(RETBUT_RESEARCH, _("Research (F2)"), IMAGE_RESEARCH_UP, WBUT_PLAIN);
-	setReticuleBut(RETBUT_BUILD, _("Build (F3)"), IMAGE_BUILD_UP, WBUT_PLAIN);
-	setReticuleBut(RETBUT_CANCEL, _("Close"), IMAGE_CANCEL_UP, WBUT_PLAIN);
+	for (int i = 0; i < NUMRETBUTS; i++)
+	{
+		setReticuleBut(i);
+	}
 	ReticuleUp = true;
 	return true;
 }
@@ -2720,7 +2797,7 @@ void togglePowerBar(void)
 }
 
 /* Add the power bars to the screen */
-bool intAddPower(void)
+bool intAddPower()
 {
 	W_BARINIT sBarInit;
 
@@ -4274,7 +4351,10 @@ static bool intAddBuild(DROID *psSelected)
 static bool intAddManufacture(STRUCTURE *psSelected)
 {
 	/* Store the correct stats list for future reference */
-	ppsStatsList = (BASE_STATS **)&apsTemplateList[0]; // FIXME Ugly cast, and is undefined behaviour (strict-aliasing violation) in C/C++.
+	if (!apsTemplateList.empty())
+	{
+		ppsStatsList = (BASE_STATS**)&apsTemplateList[0];  // FIXME Ugly cast, and is undefined behaviour (strict-aliasing violation) in C/C++.
+	}
 
 	objSelectFunc = selectManufacture;
 	objGetStatsFunc = getManufactureStats;
@@ -4532,8 +4612,7 @@ void flashReticuleButton(UDWORD buttonID)
 	WIDGET *psButton = widgGetFromID(psWScreen, buttonID);
 	if (psButton)
 	{
-		//set flashing byte to true
-		psButton->UserData = (1 << 24) | psButton->UserData;
+		retbutstats[psButton->UserData].flashing = 1;
 	}
 }
 
@@ -4543,12 +4622,8 @@ void stopReticuleButtonFlash(UDWORD buttonID)
 	WIDGET	*psButton = widgGetFromID(psWScreen, buttonID);
 	if (psButton)
 	{
-		UBYTE DownTime = UNPACKDWORD_QUAD_C(psButton->UserData);
-		UBYTE Index = UNPACKDWORD_QUAD_D(psButton->UserData);
-		// clear flashing byte
-		UBYTE flashing = false;
-		UBYTE flashTime = 0;
-		psButton->UserData = PACKDWORD_QUAD(flashTime, flashing, DownTime, Index);
+		retbutstats[psButton->UserData].flashTime = 0;
+		retbutstats[psButton->UserData].flashing = 0;
 	}
 }
 
@@ -5025,7 +5100,7 @@ DROID *intGotoNextDroidType(DROID *CurrDroid, DROID_TYPE droidType, bool AllowGr
 	for (; psDroid != NULL; psDroid = psDroid->psNext)
 	{
 		if ((psDroid->droidType == droidType
-		     || (droidType == DROID_ANY && (psDroid->droidType != DROID_TRANSPORTER && psDroid->droidType != DROID_SUPERTRANSPORTER)))
+		     || (droidType == DROID_ANY && !isTransporter(psDroid)))
 		    && (psDroid->group == UBYTE_MAX || AllowGroup))
 		{
 			if (psDroid != CurrentDroid)
@@ -5045,7 +5120,7 @@ DROID *intGotoNextDroidType(DROID *CurrDroid, DROID_TYPE droidType, bool AllowGr
 		for (psDroid = apsDroidLists[selectedPlayer]; (psDroid != CurrentDroid) && (psDroid != NULL); psDroid = psDroid->psNext)
 		{
 			if ((psDroid->droidType == droidType ||
-			     ((droidType == DROID_ANY) && (psDroid->droidType != DROID_TRANSPORTER && psDroid->droidType != DROID_SUPERTRANSPORTER))) &&
+			     ((droidType == DROID_ANY) && !isTransporter(psDroid))) &&
 			    ((psDroid->group == UBYTE_MAX) || AllowGroup))
 			{
 				if (psDroid != CurrentDroid)

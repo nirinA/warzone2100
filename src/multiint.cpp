@@ -31,7 +31,6 @@
 #include <time.h>
 
 #include "lib/framework/frameresource.h"
-#include "lib/framework/frameint.h"
 #include "lib/framework/file.h"
 #include "lib/framework/stdio_ext.h"
 
@@ -130,8 +129,6 @@
 #define WZCOL_TERC3_GROUND_LOW  pal_Colour(0x00, 0x1C, 0x0E)
 #define WZCOL_TERC3_GROUND_HIGH WZCOL_TERC3_CLIFF_HIGH
 
-static const unsigned gnImage[] = {IMAGE_GN_0, IMAGE_GN_1, IMAGE_GN_2, IMAGE_GN_3, IMAGE_GN_4, IMAGE_GN_5, IMAGE_GN_6, IMAGE_GN_7, IMAGE_GN_8, IMAGE_GN_9, IMAGE_GN_10, IMAGE_GN_11, IMAGE_GN_12, IMAGE_GN_13, IMAGE_GN_14, IMAGE_GN_15};
-
 // ////////////////////////////////////////////////////////////////////////////
 // vars
 extern char	MultiCustomMapsPath[PATH_MAX];
@@ -227,6 +224,7 @@ static struct
 
 struct AIDATA
 {
+	AIDATA() : assigned(0) {}
 	char name[MAX_LEN_AI_NAME];
 	char slo[MAX_LEN_AI_NAME];
 	char vlo[MAX_LEN_AI_NAME];
@@ -296,7 +294,7 @@ void loadMultiScripts()
 	sstrcpy(aFileName, psLevel->apDataFiles[psLevel->game]);
 	aFileName[strlen(aFileName) - 4] = '\0';
 	sstrcpy(aPathName, aFileName);
-	sstrcat(aFileName, ".ini");
+	sstrcat(aFileName, ".json");
 	sstrcat(aPathName, "/");
 
 	// Reset assigned counter
@@ -307,9 +305,9 @@ void loadMultiScripts()
 	}
 
 	// Load map scripts
-	WzConfig ini(ininame, WzConfig::ReadOnly);
 	if (PHYSFS_exists(ininame))
 	{
+		WzConfig ini(ininame, WzConfig::ReadOnly);
 		debug(LOG_SAVE, "Loading map scripts");
 		ini.beginGroup("scripts");
 		if (ini.contains("extra"))
@@ -351,6 +349,7 @@ void loadMultiScripts()
 		{
 			if (PHYSFS_exists(ininame)) // challenge file may override AI
 			{
+				WzConfig ini(ininame, WzConfig::ReadOnly);
 				ini.beginGroup("player_" + QString::number(i + 1));
 				if (ini.contains("ai"))
 				{
@@ -485,11 +484,11 @@ void loadMapPreview(bool hideInterface)
 	}
 	if (psLevel->realFileName == NULL)
 	{
-		debug(LOG_INFO, "Loading map preview: \"%s\" builtin t%d", psLevel->pName, psLevel->dataDir);
+		debug(LOG_WZ, "Loading map preview: \"%s\" builtin t%d", psLevel->pName, psLevel->dataDir);
 	}
 	else
 	{
-		debug(LOG_INFO, "Loading map preview: \"%s\" in (%s)\"%s\"  %s t%d", psLevel->pName, PHYSFS_getRealDir(psLevel->realFileName), psLevel->realFileName, psLevel->realFileHash.toString().c_str(), psLevel->dataDir);
+		debug(LOG_WZ, "Loading map preview: \"%s\" in (%s)\"%s\"  %s t%d", psLevel->pName, PHYSFS_getRealDir(psLevel->realFileName), psLevel->realFileName, psLevel->realFileHash.toString().c_str(), psLevel->dataDir);
 	}
 	rebuildSearchPath(psLevel->dataDir, false, psLevel->realFileName);
 	sstrcpy(aFileName, psLevel->apDataFiles[psLevel->game]);
@@ -656,21 +655,20 @@ void readAIs()
 	{
 		char path[PATH_MAX];
 		// See if this filename contains the extension we're looking for
-		if (!strstr(*i, ".ai"))
+		if (!strstr(*i, ".json"))
 		{
 			continue;
 		}
-
 		sstrcpy(path, basepath);
 		sstrcat(path, *i);
 		WzConfig aiconf(path, WzConfig::ReadOnly);
 		AIDATA ai;
 		aiconf.beginGroup("AI");
-		sstrcpy(ai.name, aiconf.value("name", "error").toString().toAscii().constData());
-		sstrcpy(ai.slo, aiconf.value("slo", "").toString().toAscii().constData());
-		sstrcpy(ai.vlo, aiconf.value("vlo", "").toString().toAscii().constData());
-		sstrcpy(ai.js, aiconf.value("js", "").toString().toAscii().constData());
-		sstrcpy(ai.tip, aiconf.value("tip", "Click to choose this AI").toString().toAscii().constData());
+		sstrcpy(ai.name, aiconf.value("name", "error").toString().toUtf8().constData());
+		sstrcpy(ai.slo, aiconf.value("slo", "").toString().toUtf8().constData());
+		sstrcpy(ai.vlo, aiconf.value("vlo", "").toString().toUtf8().constData());
+		sstrcpy(ai.js, aiconf.value("js", "").toString().toUtf8().constData());
+		sstrcpy(ai.tip, aiconf.value("tip", "Click to choose this AI").toString().toUtf8().constData());
 		if (strcmp(ai.name, "Nexus") == 0)
 		{
 			std::vector<AIDATA>::iterator it;
@@ -681,6 +679,7 @@ void readAIs()
 		{
 			aidata.push_back(ai);
 		}
+		aiconf.endGroup();
 	}
 	PHYSFS_freeList(files);
 }
@@ -1004,7 +1003,7 @@ static void addGames(void)
 				}
 				else
 				{
-					std::string flags;
+					QString flags;
 					if (NetPlay.games[i].privateGame)
 					{
 						flags += " "; flags += _("[Password required]");
@@ -1021,13 +1020,13 @@ static void addGames(void)
 					{
 						flags += " "; flags += _("[No VTOLs]");
 					}
-					if (flags.empty())
+					if (flags.isEmpty())
 					{
 						ssprintf(tooltipbuffer[i], _("Hosted by %s"), NetPlay.games[i].hostname);
 					}
 					else
 					{
-						ssprintf(tooltipbuffer[i], _("Hosted by %s —%s"), NetPlay.games[i].hostname, flags.c_str());
+						ssprintf(tooltipbuffer[i], _("Hosted by %s —%s"), NetPlay.games[i].hostname, flags.toUtf8().constData());
 					}
 					sButInit.pTip = tooltipbuffer[i];
 				}
@@ -1036,7 +1035,7 @@ static void addGames(void)
 				widgAddButton(psWScreen, &sButInit);
 			}
 		}
-		if (added < gcount)
+		if (!added)
 		{
 			sButInit = W_BUTINIT();
 			sButInit.formID = FRONTEND_BOTFORM;
@@ -1159,6 +1158,11 @@ void runGameFind(void )
 		if (id == MULTIOP_FILTER_TOGGLE)
 		{
 			toggleFilter = !toggleFilter;
+			toggleFilter ? widgSetButtonState(psWScreen, MULTIOP_FILTER_TOGGLE, WBUT_CLICKLOCK) : widgSetButtonState(psWScreen, MULTIOP_FILTER_TOGGLE, 0);
+		}
+		else
+		{
+			widgSetButtonState(psWScreen, MULTIOP_FILTER_TOGGLE, 0);
 		}
 		ingame.localOptionsReceived = true;
 		if (!NETfindGame())							// find games synchronously
@@ -1246,14 +1250,16 @@ void startGameFind(void)
 		IMAGE_RETURN, IMAGE_RETURN_HI, IMAGE_RETURN_HI);
 
 	//refresh
-	addMultiBut(psWScreen,FRONTEND_BOTFORM,MULTIOP_REFRESH, MULTIOP_CHATBOXW-MULTIOP_OKW-5,5,MULTIOP_OKW,MULTIOP_OKH,
-	            _("Refresh Games List"),IMAGE_REFRESH,IMAGE_REFRESH,false);			// Find Games button
+	addMultiBut(psWScreen, FRONTEND_BOTFORM, MULTIOP_REFRESH, MULTIOP_CHATBOXW-MULTIOP_OKW-5, 5, MULTIOP_OKW, MULTIOP_OKH,
+	            _("Refresh Games List"), IMAGE_RELOAD_HI, IMAGE_RELOAD, IMAGE_RELOAD);
 	//filter toggle
-	addMultiBut(psWScreen,FRONTEND_BOTFORM,MULTIOP_FILTER_TOGGLE, MULTIOP_CHATBOXW-MULTIOP_OKW-45,5,MULTIOP_OKW,MULTIOP_OKH,
-	            _("Filter Games List"),IMAGE_FOG_OFF,IMAGE_FOG_OFF_HI,false);			// Find Games button
+	addMultiBut(psWScreen, FRONTEND_BOTFORM, MULTIOP_FILTER_TOGGLE, MULTIOP_CHATBOXW-MULTIOP_OKW-45, 5, MULTIOP_OKW, MULTIOP_OKH,
+	            _("Filter Games List"),IMAGE_FILTER, IMAGE_FILTER_ON, IMAGE_FILTER_ON);
+
 	if (safeSearch || disableLobbyRefresh)
 	{
 		widgHide(psWScreen, MULTIOP_REFRESH);
+		widgHide(psWScreen, MULTIOP_FILTER_TOGGLE);
 	}
 
 	if (!NETfindGame())
@@ -1312,6 +1318,7 @@ static void hidePasswordForm(void)
 	if (!safeSearch && (!disableLobbyRefresh))
 	{
 		if (widgGetFromID(psWScreen, MULTIOP_REFRESH)) widgReveal(psWScreen, MULTIOP_REFRESH);
+		if (widgGetFromID(psWScreen, MULTIOP_FILTER_TOGGLE)) widgReveal(psWScreen,MULTIOP_FILTER_TOGGLE);
 	}
 	addGames();
 	addConsoleBox();
@@ -1326,6 +1333,8 @@ static void showPasswordForm(void)
 	widgHide(psWScreen, FRONTEND_BOTFORM);
 	widgHide(psWScreen, CON_CANCEL);
 	widgHide(psWScreen, MULTIOP_REFRESH);
+	widgHide(psWScreen, MULTIOP_FILTER_TOGGLE);
+
 	removeGames();
 
 	widgReveal(psWScreen, FRONTEND_PASSWORDFORM);
@@ -1358,7 +1367,6 @@ MultibuttonWidget::MultibuttonWidget(WIDGET* parent, int value)
 
 void MultibuttonWidget::display(int xOffset, int yOffset)
 {
-	//drawBlueBox(xOffset + x(), yOffset + y(), width(), height());
 	iV_ShadowBox(xOffset + x(), yOffset + y(), xOffset + x() + width() - 1, yOffset + y() + height() - 1, 0, WZCOL_MENU_BORDER, WZCOL_MENU_BORDER, WZCOL_MENU_BACKGROUND);
 }
 
@@ -1544,12 +1552,19 @@ static void addGameOptions()
 		addMultiEditBox(MULTIOP_OPTIONS, MULTIOP_GNAME, MCOL0, MROW2, _("Select Game Name"), game.name, IMAGE_EDIT_GAME, IMAGE_EDIT_GAME_HI, MULTIOP_GNAME_ICON);
 	}
 	widgSetButtonState(psWScreen, MULTIOP_GNAME_ICON, WBUT_DISABLE);
+
 	// map chooser
-	addMultiEditBox(MULTIOP_OPTIONS, MULTIOP_MAP  , MCOL0, MROW3, _("Select Map"), game.map, IMAGE_EDIT_MAP, IMAGE_EDIT_MAP_HI, MULTIOP_MAP_ICON);
+
+	addBlueForm(MULTIOP_OPTIONS, MULTIOP_MAP, game.map, MCOL0, MROW3, MULTIOP_BLUEFORMW, 29);
+	addMultiBut(psWScreen, MULTIOP_MAP, MULTIOP_MAP_ICON, MCOL4, 2, 20, MULTIOP_BUTH, _("Select Map"), IMAGE_EDIT_MAP, IMAGE_EDIT_MAP_HI, true);
+	addMultiBut(psWScreen, MULTIOP_MAP, MULTIOP_MAP_MOD, MCOL3+11, 10, 12, 12, _("Map-Mod!"), IMAGE_LAMP_RED, IMAGE_LAMP_AMBER, false);
+	if (!game.isMapMod)
+	{
+		widgHide(psWScreen, MULTIOP_MAP_MOD);
+	}
 	// disable for challenges
 	if (challengeActive)
 	{
-		widgSetButtonState(psWScreen, MULTIOP_MAP, WEDBS_DISABLE);
 		widgSetButtonState(psWScreen, MULTIOP_MAP_ICON, WBUT_DISABLE);
 	}
 	// password box
@@ -1768,10 +1783,10 @@ static void addAiChooser(int player)
 	int mpbutton = NetPlay.bComms ? 1 : 0;
 	// cap AI's that are shown, since it looks a bit ugly.  *FIXME*
 	int capAIs = aidata.size();
-	if (aidata.size() > 8)
+	if (aidata.size() > 9)
 	{
-		debug(LOG_INFO, "You have too many AI's loaded for the GUI to handle.  Only the first 8 will be shown.");
-		addConsoleMessage("You have too many AI's loaded for the GUI to handle.  Only the first 8 will be shown.", DEFAULT_JUSTIFY, NOTIFY_MESSAGE);
+		debug(LOG_INFO, "You have too many AI's loaded for the GUI to handle.  Only the first 10 will be shown.");
+		addConsoleMessage("You have too many AI's loaded for the GUI to handle.  Only the first 10 will be shown.", DEFAULT_JUSTIFY, NOTIFY_MESSAGE);
 		capAIs = 10;
 	}
 
@@ -1935,7 +1950,7 @@ bool recvTeamRequest(NETQUEUE queue)
 	NETuint8_t(&team);
 	NETend();
 
-	if (player > MAX_PLAYERS || team > MAX_PLAYERS)
+	if (player >= MAX_PLAYERS || team >= MAX_PLAYERS)
 	{
 		debug(LOG_NET, "NET_TEAMREQUEST invalid, player %d team, %d", (int) player, (int) team);
 		debug(LOG_ERROR, "Invalid NET_TEAMREQUEST from player %d: Tried to change player %d (team %d)",
@@ -1991,7 +2006,7 @@ bool recvReadyRequest(NETQUEUE queue)
 		NETbool(&bReady);
 	NETend();
 
-	if (player > MAX_PLAYERS)
+	if (player >= MAX_PLAYERS)
 	{
 		debug(LOG_ERROR, "Invalid NET_READY_REQUEST from player %d: player id = %d",
 		      queue.index, (int)player);
@@ -2150,7 +2165,7 @@ bool recvColourRequest(NETQUEUE queue)
 		NETuint8_t(&col);
 	NETend();
 
-	if (player > MAX_PLAYERS)
+	if (player >= MAX_PLAYERS)
 	{
 		debug(LOG_ERROR, "Invalid NET_COLOURREQUEST from player %d: Tried to change player %d to colour %d",
 		      queue.index, (int)player, (int)col);
@@ -2184,7 +2199,7 @@ bool recvPositionRequest(NETQUEUE queue)
 	NETend();
 	debug(LOG_NET, "Host received position request from player %d to %d", player, position);
 
-	if (player > MAX_PLAYERS || position > MAX_PLAYERS)
+	if (player >= MAX_PLAYERS || position >= MAX_PLAYERS)
 	{
 		debug(LOG_ERROR, "Invalid NET_POSITIONREQUEST from player %d: Tried to change player %d to %d",
 		      queue.index, (int)player, (int)position);
@@ -2532,6 +2547,7 @@ void kickPlayer(uint32_t player_id, const char *reason, LOBBY_ERROR_TYPES type)
 		NETenum(&type);
 	NETend();
 	NETflush();
+	wzDelay(300);
 	debug(LOG_NET, "Kicking player %u (%s).",
 	      (unsigned int)player_id, getPlayerName(player_id));
 
@@ -2562,7 +2578,6 @@ static void addChatBox(void)
 	initConsoleMessages();
 	enableConsoleDisplay(true);
 	setConsoleBackdropStatus(false);
-	setDefaultConsoleJust(LEFT_JUSTIFY);
 	setConsoleSizePos(MULTIOP_CHATBOXX+4+D_W, MULTIOP_CHATBOXY+14+D_H, MULTIOP_CHATBOXW-4);
 	setConsolePermanence(true,true);
 	setConsoleLineInfo(5);											// use x lines on chat window
@@ -2582,9 +2597,9 @@ static void addChatBox(void)
 
 	if (*getModList())
 	{
-		std::string modListMessage = _("Mod: ");
+		QString modListMessage = _("Mod: ");
 		modListMessage += getModList();
-		addConsoleMessage(modListMessage.c_str(), DEFAULT_JUSTIFY, SYSTEM_MESSAGE);
+		addConsoleMessage(modListMessage.toUtf8().constData(), DEFAULT_JUSTIFY, SYSTEM_MESSAGE);
 		if (NetPlay.bComms)
 		{
 			addConsoleMessage(_("All players need to have the same mods to join your game."),DEFAULT_JUSTIFY, SYSTEM_MESSAGE);
@@ -2616,7 +2631,6 @@ static void addConsoleBox(void)
 	initConsoleMessages();
 	enableConsoleDisplay(true);
 	setConsoleBackdropStatus(false);
-	setDefaultConsoleJust(LEFT_JUSTIFY);
 	setConsoleSizePos(MULTIOP_CONSOLEBOXX + 4 + D_W, MULTIOP_CONSOLEBOXY + 14 + D_H, MULTIOP_CONSOLEBOXW - 4);
 	setConsolePermanence(true, true);
 	setConsoleLineInfo(3);											// use x lines on chat window
@@ -2636,7 +2650,6 @@ static void disableMultiButs(void)
 
 	// edit boxes
 	widgSetButtonState(psWScreen,MULTIOP_GNAME,WEDBS_DISABLE);
-	widgSetButtonState(psWScreen,MULTIOP_MAP,WEDBS_DISABLE);
 
 	if (!NetPlay.isHost)
 	{
@@ -2667,7 +2680,6 @@ static void stopJoining(void)
 			widgDelete(psWScreen,FRONTEND_BACKDROP);		// refresh options screen.
 			startMultiOptions(false);
 			ingame.localJoiningInProgress = false;
-			NETremRedirects();
 			return;
 		}
 		else if(ingame.localJoiningInProgress)				// cancel a joined game.
@@ -2716,7 +2728,7 @@ static void loadMapSettings1()
 	ASSERT_OR_RETURN(, psLevel, "No level found for %s", game.map);
 	sstrcpy(aFileName, psLevel->apDataFiles[psLevel->game]);
 	aFileName[strlen(aFileName) - 4] = '\0';
-	sstrcat(aFileName, ".ini");
+	sstrcat(aFileName, ".json");
 	WzConfig ini(ininame, WzConfig::ReadOnly);
 
 	if (!PHYSFS_exists(ininame))
@@ -2755,13 +2767,13 @@ static void loadMapSettings2()
 	ASSERT_OR_RETURN(, psLevel, "No level found for %s", game.map);
 	sstrcpy(aFileName, psLevel->apDataFiles[psLevel->game]);
 	aFileName[strlen(aFileName) - 4] = '\0';
-	sstrcat(aFileName, ".ini");
-	WzConfig ini(ininame, WzConfig::ReadOnly);
+	sstrcat(aFileName, ".json");
 
 	if (!PHYSFS_exists(ininame))
 	{
 		return;
 	}
+	WzConfig ini(ininame, WzConfig::ReadOnly);
 	int offbyone = 0; // for compatibility with 3.1 and earlier challenges
 
 	ini.beginGroup("challenge"); // backwards compatibility mode
@@ -2833,7 +2845,8 @@ static void processMultiopWidgets(UDWORD id)
 			debug(LOG_WZ, "processMultiopWidgets[MULTIOP_MAP_ICON]: %s.wrf", MultiCustomMapsPath);
 			addMultiRequest(MultiCustomMapsPath, ".wrf", MULTIOP_MAP, current_tech, 0, widgGetString(psWScreen, MULTIOP_MAP));
 
-			widgSetString(psWScreen, MULTIOP_MAP, game.map);
+			widgSetString(psWScreen, MULTIOP_MAP+1 ,game.map); //What a horrible hack! FIX ME! (See addBlueForm())
+			widgReveal(psWScreen, MULTIOP_MAP_MOD);
 			break;
 
 		case MULTIOP_MAP_ICON:
@@ -2941,6 +2954,12 @@ static void processMultiopWidgets(UDWORD id)
 	// these work all the time.
 	switch(id)
 	{
+	case MULTIOP_MAP_MOD:
+		char buf[256];
+		ssprintf(buf, _("This is a map-mod, it can change your playing experience!"));
+		addConsoleMessage(buf, DEFAULT_JUSTIFY, SYSTEM_MESSAGE);
+		break;
+
 	case MULTIOP_STRUCTLIMITS:
 		changeTitleMode(MULTILIMIT);
 		break;
@@ -2992,8 +3011,9 @@ static void processMultiopWidgets(UDWORD id)
 		bHosted = true;
 		loadMapSettings2();
 
-		widgDelete(psWScreen,MULTIOP_REFRESH);
-		widgDelete(psWScreen,MULTIOP_HOST);
+		widgDelete(psWScreen, MULTIOP_REFRESH);
+		widgDelete(psWScreen, MULTIOP_HOST);
+		widgDelete(psWScreen, MULTIOP_FILTER_TOGGLE);
 
 		ingame.localOptionsReceived = true;
 
@@ -3225,16 +3245,7 @@ void startMultiplayerGame(void)
 		{
 			debug(LOG_NET, "limiter was NOT activated, setting defaults");
 
-			// NOTE: master <-> 2.3 difference, we don't load limiter_tex!
-			if (!resLoad("wrf/limiter_tex.wrf", 501))
-			{
-				debug(LOG_INFO, "Unable to load limiter_tex.  Defaults not set.");
-			}
-			if (!resLoad("wrf/piestats.wrf", 502))
-			{
-				debug(LOG_INFO, "Unable to load piestats.  Defaults not set.");
-			}
-			else if (!resLoad("wrf/limiter_data.wrf", 503))
+			if (!resLoad("wrf/limiter_data.wrf", 503))
 			{
 				debug(LOG_INFO, "Unable to load limiter_data.");
 			}
@@ -3486,6 +3497,8 @@ void frontendMultiMessages(void)
 			{
 				setLobbyError(KICK_TYPE);
 				stopJoining();
+				//screen_RestartBackDrop();
+				changeTitleMode(GAMEFIND);
 				pie_LoadBackDrop(SCREEN_RANDOMBDROP);
 				debug(LOG_ERROR, "You have been kicked, because %s ", reason);
 			}
@@ -3501,6 +3514,7 @@ void frontendMultiMessages(void)
 			stopJoining();
 			debug(LOG_NET, "The host has quit!");
 			setLobbyError(ERROR_HOSTDROPPED);
+			changeTitleMode(GAMEFIND);
 			break;
 
 		case NET_TEXTMSG:					// Chat message
@@ -3629,6 +3643,7 @@ void runMultiOptions(void)
 				sstrcpy(game.map, mapData->pName);
 				game.hash = levGetFileHash(mapData);
 				game.maxPlayers = mapData->players;
+				game.isMapMod = CheckForMod(mapData->realFileName);
 				loadMapPreview(!isHoverPreview);
 
 				if (isHoverPreview)
@@ -3642,7 +3657,7 @@ void runMultiOptions(void)
 					loadMapSettings1();
 				}
 
-				widgSetString(psWScreen, MULTIOP_MAP, mapData->pName);
+				widgSetString(psWScreen, MULTIOP_MAP+1, mapData->pName); //What a horrible, horrible way to do this! FIX ME! (See addBlueForm)
 				addGameOptions();
 				break;
 			}
@@ -3741,7 +3756,7 @@ bool startMultiOptions(bool bReenter)
 			game.skDiff[i] = (DIFF_SLIDER_STOPS / 2);	// reset AI (turn it on again)
 			setPlayerColour(i,i);						//reset all colors as well
 		}
-
+		game.isMapMod = false;			// reset map-mod status
 		game.mapHasScavengers = true; // FIXME, should default to false
 		if(!NetPlay.bComms)			// force skirmish if no comms.
 		{
@@ -3795,8 +3810,48 @@ bool startMultiOptions(bool bReenter)
 		addPlayerBox(false);								// Players
 		addGameOptions();
 		addChatBox();
-	}
 
+		if (ingame.bHostSetup)
+		{
+			char buf[512] = {'\0'};
+			if (NetPlay.bComms)
+			{
+				if (NetPlay.isUPNP)
+				{
+					if (NetPlay.isUPNP_CONFIGURED)
+					{
+						ssprintf(buf, _("UPnP has been enabled."));
+					}
+					else
+					{
+						if (NetPlay.isUPNP_ERROR)
+						{
+							ssprintf(buf, _("UPnP detection faled. You must manually configure router yourself."));
+						}
+						else
+						{
+							ssprintf(buf, _("UPnP detection is in progress..."));
+						}
+					}
+					addConsoleMessage(buf, DEFAULT_JUSTIFY, NOTIFY_MESSAGE);
+				}
+				else
+				{
+					ssprintf(buf, _("UPnP detection disabled by user. Autoconfig of port 2100 will not happen."));
+					addConsoleMessage(buf, DEFAULT_JUSTIFY, NOTIFY_MESSAGE);
+				}
+			}
+			if (challengeActive)
+			{
+				ssprintf(buf, _("Hit the ready box to begin your challenge!"));
+			}
+			else
+			{
+				ssprintf(buf, _("Press the start hosting button to begin hosting a game."));
+			}
+			addConsoleMessage(buf, DEFAULT_JUSTIFY, NOTIFY_MESSAGE);
+		}
+	}
 	// going back to multiop after setting limits up..
 	if(bReenter && bHosted)
 	{
@@ -3911,6 +3966,14 @@ void displayRemoteGame(WIDGET *psWidget, UDWORD xOffset, UDWORD yOffset)
 	}
 	iV_DrawText(name, x + GAMES_GAMENAME_START, y + 12);
 
+	if (NetPlay.games[gameID].pureMap)
+	{
+		iV_SetTextColour(WZCOL_RED);
+	}
+	else
+	{
+		iV_SetTextColour(WZCOL_FORM_TEXT);
+	}
 	// draw map name, chop when we get a too long name
 	sstrcpy(name, NetPlay.games[gameID].mapname);
 	// box size in pixels
@@ -3920,6 +3983,7 @@ void displayRemoteGame(WIDGET *psWidget, UDWORD xOffset, UDWORD yOffset)
 	}
 	iV_DrawText(name, x + GAMES_MAPNAME_START, y + 12);	// map name
 
+	iV_SetTextColour(WZCOL_FORM_TEXT);
 	iV_SetFont(font_small);
 	// draw mod name (if any)
 	if (strlen(NetPlay.games[gameID].modlist))

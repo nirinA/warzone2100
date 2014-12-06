@@ -26,8 +26,6 @@
 
 #include "widget.h"
 #include "widgbase.h"
-#include "lib/ivis_opengl/textdraw.h"
-#include "lib/framework/utf.h"
 
 /* Edit Box states */
 #define WEDBS_FIXED		0x0001		// No editing is going on
@@ -36,7 +34,6 @@
 #define WEDBS_MASK		0x000f		// 
 #define WEDBS_HILITE	0x0010		//
 #define WEDBS_DISABLE   0x0020		// disable button from selection
-
 
 class W_EDITBOX : public WIDGET
 {

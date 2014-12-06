@@ -33,7 +33,7 @@
 #include "lib/framework/resly.h"
 #include "lib/gamelib/parser.h"
 #include "lib/ivis_opengl/bitimage.h"
-#include "lib/ivis_opengl/tex.h"
+#include "lib/ivis_opengl/png_util.h"
 #include "lib/script/script.h"
 #include "lib/sound/audio.h"
 
@@ -50,9 +50,6 @@
 #include "template.h"
 #include "text.h"
 #include "texture.h"
-
-#define DT_TEXPAGE "TEXPAGE"
-#define DT_TCMASK "TCMASK"
 
 // whether a save game is currently being loaded
 static bool saveFlag = false;
@@ -292,14 +289,9 @@ static bool bufferSTERRTABLELoad(const char *fileName, void **ppData)
 	return true;
 }
 
-/* Load the body/propulsion IMDs stats */
+/* Load the body/propulsion IMDs stats -- FIXME, REMOVE IT, NOT USED */
 static bool bufferSBPIMDLoad(const char *fileName, void **ppData)
 {
-	if (!loadBodyPropulsionIMDs(fileName))
-	{
-		return false;
-	}
-
 	//not interested in this value
 	*ppData = NULL;
 	return true;
@@ -458,23 +450,6 @@ static void dataSMSGRelease(void *pData)
 	viewDataShutDown((const char *)pData);
 }
 
-/* Load an imd */
-static bool dataIMDBufferLoad(const char *pBuffer, UDWORD size, void **ppData)
-{
-	iIMDShape	*psIMD;
-	const char *pBufferPosition = pBuffer;
-
-	psIMD = iV_ProcessIMD( &pBufferPosition, pBufferPosition + size );
-	if (psIMD == NULL) {
-		debug( LOG_ERROR, "IMD load failed - %s", GetLastResourceFilename() );
-		return false;
-	}
-
-	*ppData = psIMD;
-	return true;
-}
-
-
 /*!
  * Load an image from file
  */
@@ -489,6 +464,7 @@ static bool dataImageLoad(const char *fileName, void **ppData)
 	if (!iV_loadImage_PNG(fileName, psSprite))
 	{
 		debug( LOG_ERROR, "IMGPAGE load failed" );
+		free(psSprite);
 		return false;
 	}
 
@@ -527,74 +503,6 @@ static bool dataIMGLoad(const char *fileName, void **ppData)
 static void dataIMGRelease(void *pData)
 {
 	iV_FreeImageFile((IMAGEFILE*)pData);
-}
-
-
-/* Load a texturepage into memory */
-static bool dataTexPageLoad(const char *fileName, void **ppData)
-{
-	char texpage[PATH_MAX] = {'\0'};
-
-	// This hackery is needed, because fileName will include the directory name, whilst the LastResourceFilename will not, and we need a short name to identify the texpage
-	sstrcpy(texpage, GetLastResourceFilename());
-
-	pie_MakeTexPageName(texpage);
-	if (!dataImageLoad(fileName, ppData))
-	{
-		return false;
-	}
-
-	// see if this texture page has already been loaded
-	if (resPresent(DT_TEXPAGE, texpage))
-	{
-		// replace the old texture page with the new one
-		debug(LOG_TEXTURE, "replacing %s with new texture %s", texpage, fileName);
-		pie_ReplaceTexPage((iV_Image *)*ppData, texpage, getTextureSize(), true);
-	}
-	else
-	{
-		debug(LOG_TEXTURE, "adding page %s with texture %s", texpage, fileName);
-		SetLastResourceFilename(texpage);
-		pie_AddTexPage((iV_Image *)*ppData, texpage, 0, getTextureSize(), true);
-	}
-
-	return true;
-}
-
-/* Load a team colour mask texturepage into memory */
-static bool dataTexPageTCMaskLoad(const char *fileName, void **ppData)
-{
-	char texpage[PATH_MAX] = {'\0'};
-
-	// This hackery is needed, because fileName will include the directory name, whilst the LastResourceFilename will not, and we need a short name to identify the texpage
-	sstrcpy(texpage, GetLastResourceFilename());
-
-	// Check if a corresponding texpage exists, exit if no
-	pie_MakeTexPageName(texpage);
-	ASSERT_OR_RETURN(false, resPresent(DT_TEXPAGE, texpage), "Corresponding texpage %s doesn't exists!", texpage);
-
-	pie_MakeTexPageTCMaskName(texpage);
-		
-	if (!dataImageLoad(fileName, ppData))
-	{
-		return false;
-	}
-
-	// see if this texture page has already been loaded
-	if (resPresent(DT_TCMASK, texpage))
-	{
-		// replace the old texture page with the new one
-		debug(LOG_TEXTURE, "replacing %s with new tcmask %s", texpage, fileName);
-		pie_ReplaceTexPage((iV_Image *)*ppData, texpage, getTextureSize(), false);
-	}
-	else
-	{
-		debug(LOG_TEXTURE, "adding page %s with tcmask %s", texpage, fileName);
-		SetLastResourceFilename(texpage);
-		pie_AddTexPage((iV_Image *)*ppData, texpage, 0, getTextureSize(), false);
-	}
-
-	return true;
 }
 
 /*!
@@ -856,7 +764,7 @@ struct RES_TYPE_MIN_BUF
 static const RES_TYPE_MIN_BUF BufferResourceTypes[] =
 {
 	{"SMSG", bufferSMSGLoad, dataSMSGRelease},
-	{"IMD", dataIMDBufferLoad, (RES_FREE)iV_IMDRelease},
+	{"IMD", NULL, NULL}, // ignored
 };
 
 struct RES_TYPE_MIN_FILE
@@ -890,8 +798,8 @@ static const RES_TYPE_MIN_FILE FileResourceTypes[] =
 	{"IMGPAGE", dataImageLoad, dataImageRelease},
 	{"TERTILES", dataTERTILESLoad, NULL},
 	{"IMG", dataIMGLoad, dataIMGRelease},
-	{DT_TEXPAGE, dataTexPageLoad, dataImageRelease},
-	{DT_TCMASK, dataTexPageTCMaskLoad, dataImageRelease},
+	{"TEXPAGE", NULL, NULL}, // ignored
+	{"TCMASK", NULL, NULL}, // ignored
 	{"SCRIPT", dataScriptLoad, dataScriptRelease},
 	{"SCRIPTVAL", dataScriptLoadVals, NULL},
 	{"STR_RES", dataStrResLoad, dataStrResRelease},

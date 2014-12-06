@@ -46,6 +46,7 @@ struct MULTIPLAYERGAME
 	uint8_t		alliance;					// no/yes/locked
 	uint8_t		skDiff[MAX_PLAYERS];		// skirmish game difficulty settings. 0x0=OFF 0xff=HUMAN
 	bool		mapHasScavengers;
+	bool		isMapMod;					// if a map has mods
 };
 
 struct MULTISTRUCTLIMITS
@@ -216,5 +217,7 @@ extern	void startMultiplayerGame	(void);
 extern	void resetReadyStatus		(bool bSendOptions);
 
 STRUCTURE *findResearchingFacilityByResearchIndex(unsigned player, unsigned index);
+
+void sendSyncRequest(int32_t req_id, int32_t x, int32_t y, BASE_OBJECT *psObj, BASE_OBJECT *psObj2);
 
 #endif // __INCLUDED_SRC_MULTIPLAY_H__

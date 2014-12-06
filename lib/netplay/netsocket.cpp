@@ -31,6 +31,9 @@
 #include <algorithm>
 #include <map>
 
+#if defined(WZ_CC_MSVC)
+# define ZLIB_WINAPI
+#endif
 #include <zlib.h>
 
 enum
@@ -49,7 +52,11 @@ struct Socket
 	 *
 	 * All non-listening sockets will only use the first socket handle.
 	 */
-	Socket() : ready(false), writeError(false), deleteLater(false), isCompressed(false), readDisconnected(false), zDeflateInSize(0) {}
+	Socket() : ready(false), writeError(false), deleteLater(false), isCompressed(false), readDisconnected(false), zDeflateInSize(0)
+	{
+		memset(&zDeflate, 0, sizeof(zDeflate));
+		memset(&zInflate, 0, sizeof(zInflate));
+	}
 	~Socket();
 
 	SOCKET fd[SOCK_COUNT];

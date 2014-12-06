@@ -31,11 +31,13 @@
 #include <QtScript/QScriptValueIterator>
 #include <QtScript/QScriptSyntaxCheckResult>
 #include <QtCore/QList>
+#include <QtCore/QQueue>
 #include <QtCore/QString>
 #include <QtCore/QStringList>
 #include <QtCore/QFileInfo>
+#include <QtCore/QElapsedTimer>
 #include <QtGui/QStandardItemModel>
-#include <QtGui/QFileDialog>
+#include <QtWidgets/QFileDialog>
 
 #include "lib/framework/wzapp.h"
 #include "lib/framework/wzconfig.h"
@@ -76,15 +78,15 @@ struct timerNode
 	int player;
 	int calls;
 	timerType type;
-	timerNode() {}
+	timerNode() : engine(NULL), baseobjtype(OBJ_NUM_TYPES) {}
 	timerNode(QScriptEngine *caller, QString val, int plr, int frame)
-		: function(val), engine(caller), baseobj(-1), frameTime(frame + gameTime), ms(frame), player(plr), calls(0), type(TIMER_REPEAT) {}
+		: function(val), engine(caller), baseobj(-1), baseobjtype(OBJ_NUM_TYPES), frameTime(frame + gameTime), ms(frame), player(plr), calls(0), type(TIMER_REPEAT) {}
 	bool operator== (const timerNode &t) { return function == t.function && player == t.player; }
 	// implement operator less TODO
 };
 
-#define MAX_MS 20
-#define HALF_MAX_MS 10
+#define MAX_US 20000
+#define HALF_MAX_US 10000
 
 /// List of timer events for scripts. Before running them, we sort the list then run as many as we have time for.
 /// In this way, we implement load balancing of events and keep frame rates tidy for users. Since scripts run on the
@@ -93,6 +95,21 @@ static QList<timerNode> timers;
 
 /// Scripting engine (what others call the scripting context, but QtScript's nomenclature is different).
 static QList<QScriptEngine *> scripts;
+
+/// Whether the scripts have been set up or not
+static bool scriptsReady = false;
+
+/// Structure for research events put on hold
+struct researchEvent
+{
+	RESEARCH *research;
+	STRUCTURE *structure;
+	int player;
+
+	researchEvent(RESEARCH *r, STRUCTURE *s, int p): research(r), structure(s), player(p) {}
+};
+/// Research events that are put on hold until the scripts are ready
+static QQueue<struct researchEvent> eventQueue;
 
 /// Remember what names are used internally in the scripting engine, we don't want to save these to the savegame
 static QHash<QString, int> internalNamespace;
@@ -119,7 +136,7 @@ static void updateGlobalModels();
 // ----------------------------------------------------------
 
 // Call a function by name
-static bool callFunction(QScriptEngine *engine, const QString &function, const QScriptValueList &args, bool required = false)
+static QScriptValue callFunction(QScriptEngine *engine, const QString &function, const QScriptValueList &args, bool required = false)
 {
 	code_part level = required ? LOG_ERROR : LOG_SCRIPT;
 	QScriptValue value = engine->globalObject().property(function);
@@ -130,21 +147,22 @@ static bool callFunction(QScriptEngine *engine, const QString &function, const Q
 		debug(level, "called function (%s) not defined", function.toUtf8().constData());
 		return false;
 	}
-	int ticks = wzGetTicks();
+	QElapsedTimer timer;
+	timer.start();
 	QScriptValue result = value.call(QScriptValue(), args);
-	ticks = wzGetTicks() - ticks;
+	int ticks = timer.nsecsElapsed() / 1000;
 	MONITOR *monitor = monitors.value(engine); // pick right one for this engine
 	MONITOR_BIN m;
 	if (monitor->contains(function))
 	{
 		m = monitor->value(function);
 	}
-	if (ticks > MAX_MS)
+	if (ticks > MAX_US)
 	{
-		debug(LOG_SCRIPT, "%s took %d ms at time %d", function.toUtf8().constData(), ticks, wzGetTicks());
+		debug(LOG_SCRIPT, "%s took %dus at time %d", function.toUtf8().constData(), ticks, wzGetTicks());
 		m.overMaxTimeCalls++;
 	}
-	else if (ticks > HALF_MAX_MS)
+	else if (ticks > HALF_MAX_US)
 	{
 		 m.overHalfMaxTimeCalls++;
 	}
@@ -167,9 +185,9 @@ static bool callFunction(QScriptEngine *engine, const QString &function, const Q
 		ASSERT(false, "Uncaught exception calling function \"%s\" at line %d: %s",
 		       function.toUtf8().constData(), line, result.toString().toUtf8().constData());
 		engine->clearExceptions();
-		return false;
+		return QScriptValue();
 	}
-	return true;
+	return result;
 }
 
 //-- \subsection{setTimer(function, milliseconds[, object])}
@@ -285,6 +303,23 @@ static QScriptValue js_queue(QScriptContext *context, QScriptEngine *engine)
 	return QScriptValue();
 }
 
+//-- \subsection{profile(function[, arguments])}
+//-- Calls a function with given arguments, measures time it took to evaluate the function,
+//-- and adds this time to performance monitor statistics. Transparently returns the
+//-- function's return value. The function to run is the first parameter, and it
+//-- \underline{must be quoted}. (3.2+ only)
+static QScriptValue js_profile(QScriptContext *context, QScriptEngine *engine)
+{
+	SCRIPT_ASSERT(context, context->argument(0).isString(), "Profiled functions must be quoted");
+	QString funcName = context->argument(0).toString();
+	QScriptValueList args;
+	for (int i = 1; i < context->argumentCount(); ++i)
+	{
+		args.push_back(context->argument(i));
+	}
+	return callFunction(engine, funcName, args);
+}
+
 void scriptRemoveObject(BASE_OBJECT *psObj)
 {
 	// Weed out timers with dead objects
@@ -352,10 +387,20 @@ static QScriptValue js_include(QScriptContext *context, QScriptEngine *engine)
 }
 
 // do not want to call this 'init', since scripts are often loaded before we get here
-bool prepareScripts()
+bool prepareScripts(bool loadGame)
 {
 	debug(LOG_WZ, "Scripts prepared");
-	prepareLabels();
+	if (!loadGame) // labels saved in savegame
+	{
+		prepareLabels();
+	}
+	// Assume that by this point all scripts are loaded
+	scriptsReady = true;
+	while (!eventQueue.isEmpty())
+	{
+		researchEvent resEvent = eventQueue.dequeue();
+		triggerEventResearched(resEvent.research, resEvent.structure, resEvent.player);
+	}
 	return true;
 }
 
@@ -366,6 +411,7 @@ bool initScripts()
 
 bool shutdownScripts()
 {
+	scriptsReady = false;
 	jsDebugShutdown();
 	globalDialog = false;
 	models.clear();
@@ -377,16 +423,15 @@ bool shutdownScripts()
 		QString scriptName = engine->globalObject().property("scriptName").toString();
 		int me = engine->globalObject().property("me").toInt32();
 		dumpScriptLog(scriptName, me, "=== PERFORMANCE DATA ===\n");
+		dumpScriptLog(scriptName, me, "    calls | avg (usec) | worst (usec) | worst call at | >=limit | >=limit/2 | function\n");
 		for (MONITOR::const_iterator iter = monitor->constBegin(); iter != monitor->constEnd(); ++iter)
 		{
 			QString function = iter.key();
 			MONITOR_BIN m = iter.value();
-			QString info = function;
-			info += " : " + QString::number(m.calls) + " calls; ";
-			info += QString::number(m.time / m.calls) + "ms average; ";
-			info += QString::number(m.worst) + "ms worst (at " + QString::number(m.worstGameTime) + "); ";
-			info += QString::number(m.overMaxTimeCalls) + " calls over limit; ";
-			info += QString::number(m.overHalfMaxTimeCalls) + " calls over half limit.\n";
+			QString info = QString("%1 | %2 | %3 | %4 | %5 | %6 | %7\n")
+				.arg(m.calls, 9).arg(m.time / m.calls, 10).arg(m.worst, 12)
+				.arg(m.worstGameTime, 13).arg(m.overMaxTimeCalls, 7)
+				.arg(m.overHalfMaxTimeCalls, 9).arg(function);
 			dumpScriptLog(scriptName, me, info);
 		}
 		monitor->clear();
@@ -498,6 +543,7 @@ QScriptEngine *loadPlayerScript(QString path, int player, int difficulty)
 	engine->globalObject().setProperty("setTimer", engine->newFunction(js_setTimer));
 	engine->globalObject().setProperty("queue", engine->newFunction(js_queue));
 	engine->globalObject().setProperty("removeTimer", engine->newFunction(js_removeTimer));
+	engine->globalObject().setProperty("profile", engine->newFunction(js_profile));
 	engine->globalObject().setProperty("include", engine->newFunction(js_include));
 
 	// Special global variables
@@ -752,7 +798,8 @@ static void updateGlobalModels()
 		while (it.hasNext())
 		{
 			it.next();
-			if ((!internalNamespace.contains(it.name()) && !it.value().isFunction())
+			if ((!internalNamespace.contains(it.name()) && !it.value().isFunction()
+			     && !it.value().equals(engine->globalObject()))
 			    || it.name() == "Upgrades" || it.name() == "Stats")
 			{
 				QStandardItemList list = addModelItem(it);
@@ -896,6 +943,8 @@ void jsShowDebug()
 //__ An event that is run when the mission transporter has landed with reinforcements.
 bool triggerEvent(SCRIPT_TRIGGER_TYPE trigger, BASE_OBJECT *psObj)
 {
+	// HACK: TRIGGER_VIDEO_QUIT is called before scripts for initial campaign video
+	ASSERT(scriptsReady || trigger == TRIGGER_VIDEO_QUIT, "Scripts not initialized yet");
 	for (int i = 0; i < scripts.size(); ++i)
 	{
 		QScriptEngine *engine = scripts.at(i);
@@ -965,6 +1014,7 @@ bool triggerEvent(SCRIPT_TRIGGER_TYPE trigger, BASE_OBJECT *psObj)
 //__ An event that is run after a player has left the game.
 bool triggerEventPlayerLeft(int id)
 {
+	ASSERT(scriptsReady, "Scripts not initialized yet");
 	for (int i = 0; i < scripts.size(); ++i)
 	{
 		QScriptEngine *engine = scripts.at(i);
@@ -979,6 +1029,7 @@ bool triggerEventPlayerLeft(int id)
 //__ The entered parameter is true if cheat mode entered, false otherwise.
 bool triggerEventCheatMode(bool entered)
 {
+	ASSERT(scriptsReady, "Scripts not initialized yet");
 	for (int i = 0; i < scripts.size(); ++i)
 	{
 		QScriptEngine *engine = scripts.at(i);
@@ -992,6 +1043,7 @@ bool triggerEventCheatMode(bool entered)
 //__ \subsection{eventDroidIdle(droid)} A droid should be given new orders.
 bool triggerEventDroidIdle(DROID *psDroid)
 {
+	ASSERT(scriptsReady, "Scripts not initialized yet");
 	for (int i = 0; i < scripts.size(); ++i)
 	{
 		QScriptEngine *engine = scripts.at(i);
@@ -1012,6 +1064,7 @@ bool triggerEventDroidIdle(DROID *psDroid)
 //__ gift (check \emph{eventObjectTransfer} for that).
 bool triggerEventDroidBuilt(DROID *psDroid, STRUCTURE *psFactory)
 {
+	ASSERT(scriptsReady, "Scripts not initialized yet");
 	for (int i = 0; i < scripts.size(); ++i)
 	{
 		QScriptEngine *engine = scripts.at(i);
@@ -1037,6 +1090,7 @@ bool triggerEventDroidBuilt(DROID *psDroid, STRUCTURE *psFactory)
 //__ (check \emph{eventObjectTransfer} for that).
 bool triggerEventStructBuilt(STRUCTURE *psStruct, DROID *psDroid)
 {
+	ASSERT(scriptsReady, "Scripts not initialized yet");
 	for (int i = 0; i < scripts.size(); ++i)
 	{
 		QScriptEngine *engine = scripts.at(i);
@@ -1062,6 +1116,7 @@ bool triggerEventStructBuilt(STRUCTURE *psStruct, DROID *psDroid)
 //__ register your own timer to keep checking.
 bool triggerEventStructureReady(STRUCTURE *psStruct)
 {
+	ASSERT(scriptsReady, "Scripts not initialized yet");
 	for (int i = 0; i < scripts.size(); ++i)
 	{
 		QScriptEngine *engine = scripts.at(i);
@@ -1082,6 +1137,7 @@ bool triggerEventStructureReady(STRUCTURE *psStruct)
 //__ attacked. The attacker parameter may be either a structure or a droid.
 bool triggerEventAttacked(BASE_OBJECT *psVictim, BASE_OBJECT *psAttacker, int lastHit)
 {
+	ASSERT(scriptsReady, "Scripts not initialized yet");
 	if (!psAttacker)
 	{
 		// do not fire off this event if there is no attacker -- nothing do respond to
@@ -1097,7 +1153,8 @@ bool triggerEventAttacked(BASE_OBJECT *psVictim, BASE_OBJECT *psAttacker, int la
 	{
 		QScriptEngine *engine = scripts.at(i);
 		int player = engine->globalObject().property("me").toInt32();
-		if (player == psVictim->player)
+		bool receiveAll = engine->globalObject().property("isReceivingAllEvents").toBool();
+		if (player == psVictim->player || receiveAll)
 		{
 			QScriptValueList args;
 			args += convMax(psVictim, engine);
@@ -1115,6 +1172,13 @@ bool triggerEventAttacked(BASE_OBJECT *psVictim, BASE_OBJECT *psAttacker, int la
 //__ be set to null. The player parameter gives the player it is called for.
 bool triggerEventResearched(RESEARCH *psResearch, STRUCTURE *psStruct, int player)
 {
+	//HACK: This event can be triggered when loading savegames, before the script engines are initialized.
+	// if this is the case, we need to store these events and replay them later
+	if (!scriptsReady)
+	{
+		eventQueue.enqueue(researchEvent(psResearch, psStruct, player));
+		return true;
+	}
 	for (int i = 0; i < scripts.size(); ++i)
 	{
 		QScriptEngine *engine = scripts.at(i);
@@ -1144,6 +1208,7 @@ bool triggerEventResearched(RESEARCH *psResearch, STRUCTURE *psStruct, int playe
 //__ the parameter object around, since it is about to vanish!
 bool triggerEventDestroyed(BASE_OBJECT *psVictim)
 {
+	ASSERT(scriptsReady, "Scripts not initialized yet");
 	for (int i = 0; i < scripts.size() && psVictim; ++i)
 	{
 		QScriptEngine *engine = scripts.at(i);
@@ -1160,6 +1225,7 @@ bool triggerEventDestroyed(BASE_OBJECT *psVictim)
 //__ Careful passing the parameter object around, since it is about to vanish! (3.2+ only)
 bool triggerEventPickup(FEATURE *psFeat, DROID *psDroid)
 {
+	ASSERT(scriptsReady, "Scripts not initialized yet");
 	for (int i = 0; i < scripts.size(); ++i)
 	{
 		QScriptEngine *engine = scripts.at(i);
@@ -1172,22 +1238,36 @@ bool triggerEventPickup(FEATURE *psFeat, DROID *psDroid)
 }
 
 //__ \subsection{eventObjectSeen(viewer, seen)}
-//__ An event that is run sometimes when an object goes from not seen to seen.
+//__ An event that is run sometimes when an object, which was marked by an object label,
+//__ which was reset through resetLabel() to subscribe for events, goes from not seen to seen.
+//__ An event that is run sometimes when an objectm  goes from not seen to seen.
 //__ First parameter is \emph{game object} doing the seeing, the next the game
-//__ object being seen. This is event is throttled, and so is not called every time.
+//__ object being seen.
+//__ \subsection{eventGroupSeen(viewer, group)}
+//__ An event that is run sometimes when a member of a group, which was marked by a group label,
+//__ which was reset through resetLabel() to subscribe for events, goes from not seen to seen.
+//__ First parameter is \emph{game object} doing the seeing, the next the id of the group
+//__ being seen.
 bool triggerEventSeen(BASE_OBJECT *psViewer, BASE_OBJECT *psSeen)
 {
+	ASSERT(scriptsReady, "Scripts not initialized yet");
 	for (int i = 0; i < scripts.size() && psSeen && psViewer; ++i)
 	{
 		QScriptEngine *engine = scripts.at(i);
-		int me = engine->globalObject().property("me").toInt32();
-		bool receiveAll = engine->globalObject().property("isReceivingAllEvents").toBool();
-		if (me == psViewer->player || receiveAll)
+		std::pair<bool, int> callbacks = seenLabelCheck(engine, psSeen, psViewer);
+		if (callbacks.first)
 		{
 			QScriptValueList args;
 			args += convMax(psViewer, engine);
 			args += convMax(psSeen, engine);
 			callFunction(engine, "eventObjectSeen", args);
+		}
+		if (callbacks.second)
+		{
+			QScriptValueList args;
+			args += convMax(psViewer, engine);
+			args += QScriptValue(callbacks.second); // group id
+			callFunction(engine, "eventGroupSeen", args);
 		}
 	}
 	return true;
@@ -1200,6 +1280,7 @@ bool triggerEventSeen(BASE_OBJECT *psViewer, BASE_OBJECT *psSeen)
 //__ The event is called for both players.
 bool triggerEventObjectTransfer(BASE_OBJECT *psObj, int from)
 {
+	ASSERT(scriptsReady, "Scripts not initialized yet");
 	for (int i = 0; i < scripts.size() && psObj; ++i)
 	{
 		QScriptEngine *engine = scripts.at(i);
@@ -1222,7 +1303,7 @@ bool triggerEventObjectTransfer(BASE_OBJECT *psObj, int from)
 //__ player.
 bool triggerEventChat(int from, int to, const char *message)
 {
-	for (int i = 0; i < scripts.size() && message; ++i)
+	for (int i = 0; scriptsReady && message && i < scripts.size(); ++i)
 	{
 		QScriptEngine *engine = scripts.at(i);
 		int me = engine->globalObject().property("me").toInt32();
@@ -1234,7 +1315,6 @@ bool triggerEventChat(int from, int to, const char *message)
 			args += QScriptValue(to);
 			args += QScriptValue(message);
 			callFunction(engine, "eventChat", args);
-			break; // only call once
 		}
 	}
 	return true;
@@ -1273,6 +1353,7 @@ bool triggerEventBeacon(int from, int to, const char *message, int x, int y)
 //__ player sending the beacon. For the moment, the \emph{to} parameter is always the script player.
 bool triggerEventBeaconRemoved(int from, int to)
 {
+	ASSERT(scriptsReady, "Scripts not initialized yet");
 	for (int i = 0; i < scripts.size(); ++i)
 	{
 		QScriptEngine *engine = scripts.at(i);
@@ -1299,6 +1380,7 @@ bool triggerEventBeaconRemoved(int from, int to)
 //__ be empty.
 bool triggerEventSelected()
 {
+	ASSERT(scriptsReady, "Scripts not initialized yet");
 	selectionChanged = true;
 	return true;
 }
@@ -1309,6 +1391,7 @@ bool triggerEventSelected()
 // Since groups are entities local to one context, we do not iterate over them here.
 bool triggerEventGroupLoss(BASE_OBJECT *psObj, int group, int size, QScriptEngine *engine)
 {
+	ASSERT(scriptsReady, "Scripts not initialized yet");
 	QScriptValueList args;
 	args += convMax(psObj, engine);
 	args += QScriptValue(group);
@@ -1329,11 +1412,11 @@ bool triggerEventDroidMoved(DROID *psDroid, int oldx, int oldy)
 //__ eventArea + the name of the label.
 bool triggerEventArea(QString label, DROID *psDroid)
 {
+	ASSERT(scriptsReady, "Scripts not initialized yet");
 	for (int i = 0; i < scripts.size(); ++i)
 	{
 		QScriptEngine *engine = scripts.at(i);
 		QScriptValueList args;
-		args += QScriptValue(label);
 		args += convDroid(psDroid, engine);
 		QString funcname = QString("eventArea" + label);
 		debug(LOG_SCRIPT, "Triggering %s for %s", funcname.toUtf8().constData(),
@@ -1348,12 +1431,41 @@ bool triggerEventArea(QString label, DROID *psDroid)
 //__ run on the client of the player designing the template.
 bool triggerEventDesignCreated(DROID_TEMPLATE *psTemplate)
 {
+	ASSERT(scriptsReady, "Scripts not initialized yet");
 	for (int i = 0; i < scripts.size(); ++i)
 	{
 		QScriptEngine *engine = scripts.at(i);
 		QScriptValueList args;
 		args += convTemplate(psTemplate, engine);
 		callFunction(engine, "eventDesignCreated", args);
+	}
+	return true;
+}
+
+//__ \subsection{eventSyncRequest(req_id, x, y, obj_id, obj_id2)}
+//__ An event that is called from a script and synchronized with all other scripts and hosts
+//__ to prevent desync from happening. Sync requests must be carefully validated to prevent
+//__ cheating!
+bool triggerEventSyncRequest(int from, int req_id, int x, int y, BASE_OBJECT *psObj, BASE_OBJECT *psObj2)
+{
+	ASSERT(scriptsReady, "Scripts not initialized yet");
+	for (int i = 0; i < scripts.size(); ++i)
+	{
+		QScriptEngine *engine = scripts.at(i);
+		QScriptValueList args;
+		args += QScriptValue(from);
+		args += QScriptValue(req_id);
+		args += QScriptValue(x);
+		args += QScriptValue(y);
+		if (psObj)
+		{
+			args += convMax(psObj, engine);
+		}
+		if (psObj2)
+		{
+			args += convMax(psObj2, engine);
+		}
+		callFunction(engine, "eventSyncRequest", args);
 	}
 	return true;
 }

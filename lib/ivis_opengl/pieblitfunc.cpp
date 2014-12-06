@@ -21,15 +21,15 @@
 /*
  * pieBlitFunc.c
  *
- * patch for exisitng ivis rectangle draw functions.
- *
  */
 /***************************************************************************/
 
 #include "lib/framework/frame.h"
 #include "lib/framework/opengl.h"
+#include "lib/gamelib/gtime.h"
 #include <time.h>
 
+#include "lib/ivis_opengl/bitimage.h"
 #include "lib/ivis_opengl/pieblitfunc.h"
 #include "lib/ivis_opengl/piedef.h"
 #include "lib/ivis_opengl/piemode.h"
@@ -41,23 +41,28 @@
 #include "piematrix.h"
 #include "screen.h"
 
+
 /***************************************************************************/
 /*
  *	Local Variables
  */
 /***************************************************************************/
 
-#define pie_FILLRED	 16
-#define pie_FILLGREEN	 16
-#define pie_FILLBLUE	128
-#define pie_FILLTRANS	128
-
 static GFX *radarGfx = NULL;
 
 struct PIERECT  ///< Screen rectangle.
 {
-	SWORD x, y, w, h;
+	float x, y, w, h;
 };
+
+/***************************************************************************/
+/*
+ *	Static function forward declarations
+ */
+/***************************************************************************/
+
+static bool assertValidImage(IMAGEFILE *imageFile, unsigned id);
+static Vector2i makePieImage(IMAGEFILE *imageFile, unsigned id, PIERECT *dest = NULL, int x = 0, int y = 0);
 
 /***************************************************************************/
 /*
@@ -146,7 +151,6 @@ void GFX::draw()
 	}
 	else if (mType == GFX_COLOUR)
 	{
-		pie_SetAlphaTest(false);
 		pie_SetTexturePage(TEXPAGE_NONE);
 		glEnableClientState(GL_COLOR_ARRAY);
 		glBindBuffer(GL_ARRAY_BUFFER, mBuffers[VBO_TEXCOORD]); glColorPointer(4, GL_UNSIGNED_BYTE, 0, NULL);
@@ -178,7 +182,6 @@ GFX::~GFX()
 void iV_Line(int x0, int y0, int x1, int y1, PIELIGHT colour)
 {
 	pie_SetTexturePage(TEXPAGE_NONE);
-	pie_SetAlphaTest(false);
 
 	glColor4ubv(colour.vector);
 	glBegin(GL_LINES);
@@ -192,8 +195,6 @@ void iV_Line(int x0, int y0, int x1, int y1, PIELIGHT colour)
  */
 static void pie_DrawRect(float x0, float y0, float x1, float y1, PIELIGHT colour)
 {
-	pie_SetAlphaTest(false);
-
 	glColor4ubv(colour.vector);
 	glBegin(GL_TRIANGLE_STRIP);
 		glVertex2f(x0, y0);
@@ -208,6 +209,15 @@ void iV_ShadowBox(int x0, int y0, int x1, int y1, int pad, PIELIGHT first, PIELI
 	pie_SetRendMode(REND_OPAQUE);
 	pie_SetTexturePage(TEXPAGE_NONE);
 	pie_DrawRect(x0 + pad, y0 + pad, x1 - pad, y1 - pad, fill); // necessary side-effect: sets alpha test off
+	iV_Box2(x0, y0, x1, y1, first, second);
+}
+
+/***************************************************************************/
+
+void iV_Box2(int x0,int y0, int x1, int y1, PIELIGHT first, PIELIGHT second)
+{
+	pie_SetTexturePage(TEXPAGE_NONE);
+
 	glColor4ubv(first.vector);
 	glBegin(GL_LINES);
 	glVertex2i(x0, y1);
@@ -217,41 +227,6 @@ void iV_ShadowBox(int x0, int y0, int x1, int y1, int pad, PIELIGHT first, PIELI
 	glEnd();
 	glColor4ubv(second.vector);
 	glBegin(GL_LINES);
-	glVertex2i(x1, y0);
-	glVertex2i(x1, y1);
-	glVertex2i(x0, y1);
-	glVertex2i(x1, y1);
-	glEnd();
-}
-
-/***************************************************************************/
-
-void iV_Box(int x0,int y0, int x1, int y1, PIELIGHT colour)
-{
-	pie_SetTexturePage(TEXPAGE_NONE);
-	pie_SetAlphaTest(false);
-
-	if (x0>rendSurface.clip.right || x1<rendSurface.clip.left ||
-		y0>rendSurface.clip.bottom || y1<rendSurface.clip.top)
-	{
-		return;
-	}
-
-	if (x0<rendSurface.clip.left)
-		x0 = rendSurface.clip.left;
-	if (x1>rendSurface.clip.right)
-		x1 = rendSurface.clip.right;
-	if (y0<rendSurface.clip.top)
-		y0 = rendSurface.clip.top;
-	if (y1>rendSurface.clip.bottom)
-		y1 = rendSurface.clip.bottom;
-
-	glColor4ubv(colour.vector);
-	glBegin(GL_LINES);
-	glVertex2i(x0, y1);
-	glVertex2i(x0, y0);
-	glVertex2i(x0, y0);
-	glVertex2i(x1, y0);
 	glVertex2i(x1, y0);
 	glVertex2i(x1, y1);
 	glVertex2i(x0, y1);
@@ -272,13 +247,7 @@ void pie_BoxFill(int x0,int y0, int x1, int y1, PIELIGHT colour)
 
 void iV_TransBoxFill(float x0, float y0, float x1, float y1)
 {
-	PIELIGHT light;
-
-	light.byte.r = pie_FILLRED;
-	light.byte.g = pie_FILLGREEN;
-	light.byte.b = pie_FILLBLUE;
-	light.byte.a = pie_FILLTRANS;
-	pie_UniTransBoxFill(x0, y0, x1, y1, light);
+	pie_UniTransBoxFill(x0, y0, x1, y1, WZCOL_TRANSPARENT_BOX);
 }
 
 /***************************************************************************/
@@ -324,7 +293,7 @@ static void pie_DrawImage(IMAGEFILE *imageFile, int id, Vector2i size, const PIE
 	glEnd();
 }
 
-static Vector2i makePieImage(IMAGEFILE *imageFile, unsigned id, PIERECT *dest = NULL, int x = 0, int y = 0)
+static Vector2i makePieImage(IMAGEFILE *imageFile, unsigned id, PIERECT *dest, int x, int y)
 {
 	ImageDef const &image = imageFile->imageDefs[id];
 	Vector2i pieImage;
@@ -340,6 +309,34 @@ static Vector2i makePieImage(IMAGEFILE *imageFile, unsigned id, PIERECT *dest = 
 	return pieImage;
 }
 
+void iV_DrawImage2(const QString &filename, float x, float y, float width, float height)
+{
+	ImageDef *image = iV_GetImage(filename, x, y);
+	const GLfloat invTextureSize = image->invTextureSize;
+	const int tu = image->Tu;
+	const int tv = image->Tv;
+	const int w = width > 0 ? width : image->Width;
+	const int h = height > 0 ? height : image->Height;
+	x += image->XOffset;
+	y += image->YOffset;
+	pie_SetTexturePage(image->textureId);
+	glColor4ubv(WZCOL_WHITE.vector);
+	pie_SetRendMode(REND_ALPHA);
+	glBegin(GL_TRIANGLE_STRIP);
+		glTexCoord2f(tu * image->invTextureSize, tv * invTextureSize);
+		glVertex2f(x, y);
+
+		glTexCoord2f((tu + image->Width) * invTextureSize, tv * invTextureSize);
+		glVertex2f(x + w, y);
+
+		glTexCoord2f(tu * invTextureSize, (tv + image->Height) * invTextureSize);
+		glVertex2f(x, y + h);
+
+		glTexCoord2f((tu + image->Width) * invTextureSize, (tv + image->Height) * invTextureSize);
+		glVertex2f(x + w, y + h);
+	glEnd();
+}
+
 void iV_DrawImage(IMAGEFILE *ImageFile, UWORD ID, int x, int y)
 {
 	if (!assertValidImage(ImageFile, ID))
@@ -351,14 +348,13 @@ void iV_DrawImage(IMAGEFILE *ImageFile, UWORD ID, int x, int y)
 	Vector2i pieImage = makePieImage(ImageFile, ID, &dest, x, y);
 
 	pie_SetRendMode(REND_ALPHA);
-	pie_SetAlphaTest(true);
 
 	pie_DrawImage(ImageFile, ID, pieImage, &dest);
 }
 
 void iV_DrawImageTc(Image image, Image imageTc, int x, int y, PIELIGHT colour)
 {
-	if (!assertValidImage(image.images, image.id) || !assertValidImage(image.images, image.id))
+	if (!assertValidImage(image.images, image.id) || !assertValidImage(imageTc.images, imageTc.id))
 	{
 		return;
 	}
@@ -368,7 +364,6 @@ void iV_DrawImageTc(Image image, Image imageTc, int x, int y, PIELIGHT colour)
 	Vector2i pieImageTc = makePieImage(imageTc.images, imageTc.id);
 
 	pie_SetRendMode(REND_ALPHA);
-	pie_SetAlphaTest(true);
 
 	pie_DrawImage(image.images, image.id, pieImage, &dest);
 	pie_DrawImage(imageTc.images, imageTc.id, pieImageTc, &dest, colour);
@@ -383,7 +378,6 @@ void iV_DrawImageRepeatX(IMAGEFILE *ImageFile, UWORD ID, int x, int y, int Width
 	const ImageDef *Image = &ImageFile->imageDefs[ID];
 
 	pie_SetRendMode(REND_OPAQUE);
-	pie_SetAlphaTest(true);
 
 	PIERECT dest;
 	Vector2i pieImage = makePieImage(ImageFile, ID, &dest, x, y);
@@ -413,7 +407,6 @@ void iV_DrawImageRepeatY(IMAGEFILE *ImageFile, UWORD ID, int x, int y, int Heigh
 	const ImageDef *Image = &ImageFile->imageDefs[ID];
 
 	pie_SetRendMode(REND_OPAQUE);
-	pie_SetAlphaTest(true);
 
 	PIERECT dest;
 	Vector2i pieImage = makePieImage(ImageFile, ID, &dest, x, y);
@@ -433,24 +426,6 @@ void iV_DrawImageRepeatY(IMAGEFILE *ImageFile, UWORD ID, int x, int y, int Heigh
 		dest.h = vRemainder;
 		pie_DrawImage(ImageFile, ID, pieImage, &dest);
 	}
-}
-
-void iV_DrawImageScaled(IMAGEFILE *ImageFile, UWORD ID, int x, int y, int w, int h)
-{
-	if (!assertValidImage(ImageFile, ID))
-	{
-		return;
-	}
-
-	PIERECT dest;
-	Vector2i pieImage = makePieImage(ImageFile, ID, &dest, x, y);
-	dest.w = w;
-	dest.h = h;
-
-	pie_SetRendMode(REND_ALPHA);
-	pie_SetAlphaTest(true);
-
-	pie_DrawImage(ImageFile, ID, pieImage, &dest);
 }
 
 bool pie_InitRadar(void)
@@ -488,27 +463,19 @@ void pie_RenderRadar()
 	radarGfx->draw();
 }
 
+/// Load and display a random backdrop picture.
 void pie_LoadBackDrop(SCREENTYPE screenType)
 {
-	char backd[128];
-
-	//randomly load in a backdrop piccy.
-	srand( (unsigned)time(NULL) + 17 ); // Use offset since time alone doesn't work very well
-
 	switch (screenType)
 	{
-		case SCREEN_RANDOMBDROP:
-			snprintf(backd, sizeof(backd), "texpages/bdrops/backdrop%i.png", rand() % NUM_BACKDROPS); // Range: 0 to (NUM_BACKDROPS-1)
-			break;
-		case SCREEN_MISSIONEND:
-			sstrcpy(backd, "texpages/bdrops/missionend.png");
-			break;
-
-		case SCREEN_CREDITS:
-		default:
-			sstrcpy(backd, "texpages/bdrops/credits.png");
-			break;
+	case SCREEN_RANDOMBDROP:
+		screen_SetRandomBackdrop("texpages/bdrops/", "backdrop");
+		break;
+	case SCREEN_MISSIONEND:
+		screen_SetRandomBackdrop("texpages/bdrops/", "missionend");
+		break;
+	case SCREEN_CREDITS:
+		screen_SetRandomBackdrop("texpages/bdrops/", "credits");
+		break;
 	}
-
-	screen_SetBackDropFromFile(backd);
 }

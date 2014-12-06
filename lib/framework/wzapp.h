@@ -31,11 +31,12 @@ struct WZ_SEMAPHORE;
 
 
 void wzMain(int &argc, char **argv);
-bool wzMain2();
+bool wzMain2(int antialiasing = 0, bool fullscreen = false, bool vsync = true);
 void wzMain3();
 void wzQuit(void);              ///< Quit game
 void wzShutdown();
 void wzToggleFullscreen();
+bool wzIsFullscreen();
 void wzSetCursor(CURSOR index);
 void wzScreenFlip(void);	///< Swap the graphics buffers
 void wzShowMouse(bool visible); ///< Show the Mouse?
@@ -48,6 +49,7 @@ QList<QSize> wzAvailableResolutions();  ///< Get list of available resolutions.
 void wzSetSwapInterval(int swap);
 int wzGetSwapInterval();
 QString wzGetSelection();
+void wzDelay(unsigned int delay);	//delay in ms
 
 // Thread related
 WZ_THREAD *wzThreadCreate(int (*threadFunc)(void *), void *data);

@@ -207,10 +207,7 @@
 #  if !defined(__STDC__)
 #    define __STDC__ 1
 #  endif
-/* Visual C++.Net issues for _MSC_VER >= 1300 */
-#  if _MSC_VER >= 1300
-#    define WZ_CC_MSVC_NET
-#  endif
+
 /* Intel C++ disguising as Visual C++: the `using' keyword avoids warnings */
 #  if defined(__INTEL_COMPILER)
 #    define WZ_CC_INTEL
@@ -225,7 +222,7 @@
 
 #elif defined(__GNUC__)
 #  define WZ_CC_GNU
-#  if defined(__MINGW32__)
+#  if defined(__MINGW32__) || defined(__MINGW64__)
 #    define WZ_CC_MINGW
 #  endif
 #  if defined(__INTEL_COMPILER)
@@ -308,9 +305,10 @@
 
      98       - ISO/IEC 14882:1998 / C++98
 */
+// VS 2013 aka _MSC_VER == 1800 still has __cplusplus == 199711L for some odd reason.
 #if defined(__cplusplus)
 # define WZ_CXX98
-# if __cplusplus >= 201103L || defined(__GXX_EXPERIMENTAL_CXX0X__)
+# if __cplusplus >= 201103L || defined(__GXX_EXPERIMENTAL_CXX0X__) || (_MSC_VER >= 1800)
 #  define WZ_CXX11
 # endif
 #endif /* WZ_CXXxx */
@@ -384,7 +382,7 @@
  */
 #if WZ_CC_GNU_PREREQ(3,2) || WZ_CC_INTEL_PREREQ(10,0)
 #  define WZ_DECL_DEPRECATED __attribute__((__deprecated__))
-#elif defined(WZ_CC_MSVC) && defined(WZ_CC_MSVC_NET)
+#elif defined(WZ_CC_MSVC)
 #  define WZ_DECL_DEPRECATED __declspec(deprecated)
 #else
 #  define WZ_DECL_DEPRECATED
@@ -504,7 +502,7 @@
  */
 #if defined(WZ_C99) && WZ_CC_GNU_PREREQ(4,1) && !defined(WZ_CC_INTEL)
 #  define WZ_DECL_RESTRICT restrict
-#elif defined(WZ_CC_MSVC) && defined(WZ_CC_MSVC_NET)
+#elif defined(WZ_CC_MSVC)
 #  define WZ_DECL_RESTRICT __restrict
 #else
 #  define WZ_DECL_RESTRICT
@@ -514,7 +512,9 @@
 /*! \def WZ_DECL_THREAD
  * Declares a variable to be local to the running thread, and not shared between threads.
  */
-#if defined(WZ_CC_GNU) || defined(WZ_CC_INTEL)
+#if defined(__MACOSX__)
+#  define WZ_DECL_THREAD // nothing, MacOSX does not yet support this
+#elif defined(WZ_CC_GNU) || defined(WZ_CC_INTEL)
 #  define WZ_DECL_THREAD __thread
 #elif defined(WZ_CC_MSVC)
 #  define WZ_DECL_THREAD __declspec(thread)
@@ -532,6 +532,10 @@
 
 #if defined(WZ_OS_WIN)
 #  if defined(WZ_CC_MINGW)
+// NOTE: For mingw-w64, we must define _GDI32_ otherwise we would be making WINGDIAPI DECLSPEC_IMPORT
+// which we do not want (that is for shared libs, aka dlls).  See wingdi.h to see where the check is.
+// refs: http://sourceforge.net/p/mingw-w64/patches/41/
+#    define _GDI32_
 #    include <unistd.h>
 #    include <sys/param.h>
 #    include <w32api.h>
@@ -590,8 +594,7 @@
 #ifndef PACKAGE
 # define PACKAGE "Warzone"
 #endif
-// Apparently flex declares isatty with C++ linkage on Windows. Don't ask why. Declaring here instead.
-//extern "C" int isatty(int);
+
 
 #  endif /* WZ_CC_MSVC */
 

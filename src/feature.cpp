@@ -95,10 +95,10 @@ bool loadFeatureStats(const char *pFileName)
 		else if (subType == "TREE") p->subType = FEAT_TREE;
 		else if (subType == "SKYSCRAPER") p->subType = FEAT_SKYSCRAPER;
 		else ASSERT(false, "Unknown feature type: %s", subType.toUtf8().constData());
-		p->psImd = (iIMDShape *)resGetData("IMD", ini.value("model").toString().toUtf8().constData());
+		p->psImd = modelGet(ini.value("model").toString());
 		p->baseWidth = ini.value("width", 1).toInt();
 		p->baseBreadth = ini.value("breadth", 1).toInt();
-		p->tileDraw = ini.value("tiledraw", 1).toInt();
+		p->tileDraw = ini.value("tileDraw", 1).toInt();
 		p->allowLOS = ini.value("lineOfSight", 1).toInt();
 		p->visibleAtStart = ini.value("startVisible", 1).toInt();
 		p->damageable = ini.value("damageable", 1).toInt();

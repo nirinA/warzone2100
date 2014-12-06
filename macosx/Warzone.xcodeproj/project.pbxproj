@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 45;
+	objectVersion = 46;
 	objects = {
 
 /* Begin PBXAggregateTarget section */
@@ -68,13 +68,13 @@
 			buildConfigurationList = 43FA570F10FF8EBB0074E914 /* Build configuration list for PBXAggregateTarget "Setup Prebuilt Components" */;
 			buildPhases = (
 				4345290E1130F84E002AD731 /* msgfmt */,
-				433360B311A079F700380F5E /* Moc */,
 				43B8FF2D127CD57D006F5A13 /* Fonts */,
 				436D24A4149641D200BF74E3 /* SDL */,
 				4311544C14BA01F900332251 /* Docs */,
 				43CEADC3141D6E810001637B /* fontconfig */,
 				43CEADC6141D6EEE0001637B /* freetype */,
 				433360A711A0796D00380F5E /* Qt */,
+				433360B311A079F700380F5E /* Moc */,
 			);
 			dependencies = (
 			);
@@ -145,10 +145,8 @@
 		0246A0E40BD3CC0B004D1C70 /* animobj.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0246A0D90BD3CC0B004D1C70 /* animobj.cpp */; };
 		0246A0E70BD3CC0B004D1C70 /* gtime.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0246A0DD0BD3CC0B004D1C70 /* gtime.cpp */; };
 		0246A1030BD3CC29004D1C70 /* bitimage.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0246A0EA0BD3CC29004D1C70 /* bitimage.cpp */; };
-		0246A1040BD3CC29004D1C70 /* imd.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0246A0EE0BD3CC29004D1C70 /* imd.cpp */; };
 		0246A1050BD3CC29004D1C70 /* imdload.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0246A0F00BD3CC29004D1C70 /* imdload.cpp */; };
 		0246A1070BD3CC29004D1C70 /* pieclip.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0246A0F60BD3CC29004D1C70 /* pieclip.cpp */; };
-		0246A11D0BD3CC43004D1C70 /* ivi.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0246A10B0BD3CC43004D1C70 /* ivi.cpp */; };
 		0246A11E0BD3CC43004D1C70 /* pieblitfunc.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0246A10C0BD3CC43004D1C70 /* pieblitfunc.cpp */; };
 		0246A11F0BD3CC43004D1C70 /* piedraw.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0246A10D0BD3CC43004D1C70 /* piedraw.cpp */; };
 		0246A1200BD3CC43004D1C70 /* piefunc.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0246A10E0BD3CC43004D1C70 /* piefunc.cpp */; };
@@ -156,7 +154,6 @@
 		0246A1220BD3CC43004D1C70 /* piemode.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0246A1110BD3CC43004D1C70 /* piemode.cpp */; };
 		0246A1230BD3CC43004D1C70 /* piepalette.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0246A1120BD3CC43004D1C70 /* piepalette.cpp */; };
 		0246A1240BD3CC43004D1C70 /* piestate.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0246A1130BD3CC43004D1C70 /* piestate.cpp */; };
-		0246A1270BD3CC43004D1C70 /* rendmode.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0246A1170BD3CC43004D1C70 /* rendmode.cpp */; };
 		0246A1280BD3CC43004D1C70 /* screen.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0246A1180BD3CC43004D1C70 /* screen.cpp */; };
 		0246A1290BD3CC43004D1C70 /* tex.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0246A11A0BD3CC43004D1C70 /* tex.cpp */; };
 		0246A12A0BD3CC43004D1C70 /* textdraw.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0246A11B0BD3CC43004D1C70 /* textdraw.cpp */; };
@@ -477,6 +474,11 @@
 		43C3B9BF118BEB63000BBE59 /* setup_44p51.h in Headers */ = {isa = PBXBuildFile; fileRef = 43C3B9BD118BEB63000BBE59 /* setup_44p51.h */; };
 		43C3B9C5118BEBE0000BBE59 /* tone.c in Sources */ = {isa = PBXBuildFile; fileRef = 43C3B9C2118BEBE0000BBE59 /* tone.c */; };
 		43C3B9E0118BEC40000BBE59 /* res_books_51.h in Headers */ = {isa = PBXBuildFile; fileRef = 43C3B9B4118BEA9D000BBE59 /* res_books_51.h */; };
+		43CB73D8181E0E0100D1D1DD /* miniupnpctypes.h in Headers */ = {isa = PBXBuildFile; fileRef = 43CB73D3181E0E0100D1D1DD /* miniupnpctypes.h */; };
+		43CB73D9181E0E0100D1D1DD /* portlistingparse.c in Sources */ = {isa = PBXBuildFile; fileRef = 43CB73D4181E0E0100D1D1DD /* portlistingparse.c */; };
+		43CB73DA181E0E0100D1D1DD /* portlistingparse.h in Headers */ = {isa = PBXBuildFile; fileRef = 43CB73D5181E0E0100D1D1DD /* portlistingparse.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		43CB73DB181E0E0100D1D1DD /* receivedata.c in Sources */ = {isa = PBXBuildFile; fileRef = 43CB73D6181E0E0100D1D1DD /* receivedata.c */; };
+		43CB73DC181E0E0100D1D1DD /* receivedata.h in Headers */ = {isa = PBXBuildFile; fileRef = 43CB73D7181E0E0100D1D1DD /* receivedata.h */; };
 		43CCDC9514BA3AC800B21363 /* glc.h in Headers */ = {isa = PBXBuildFile; fileRef = 43CCDC9414BA3AC800B21363 /* glc.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		43CCDCB514BA3B2100B21363 /* context.c in Sources */ = {isa = PBXBuildFile; fileRef = 43CCDC9614BA3B2100B21363 /* context.c */; };
 		43CCDCB614BA3B2100B21363 /* database.c in Sources */ = {isa = PBXBuildFile; fileRef = 43CCDC9714BA3B2100B21363 /* database.c */; };
@@ -1255,7 +1257,6 @@
 		0246A0A00BD3CBD5004D1C70 /* debug.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = debug.h; path = ../lib/framework/debug.h; sourceTree = SOURCE_ROOT; };
 		0246A0A30BD3CBD5004D1C70 /* frame.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = frame.cpp; path = ../lib/framework/frame.cpp; sourceTree = SOURCE_ROOT; };
 		0246A0A40BD3CBD5004D1C70 /* frame.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = frame.h; path = ../lib/framework/frame.h; sourceTree = SOURCE_ROOT; };
-		0246A0A50BD3CBD5004D1C70 /* frameint.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = frameint.h; path = ../lib/framework/frameint.h; sourceTree = SOURCE_ROOT; };
 		0246A0A60BD3CBD5004D1C70 /* frameresource.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = frameresource.cpp; path = ../lib/framework/frameresource.cpp; sourceTree = SOURCE_ROOT; };
 		0246A0A70BD3CBD5004D1C70 /* frameresource.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = frameresource.h; path = ../lib/framework/frameresource.h; sourceTree = SOURCE_ROOT; };
 		0246A0A80BD3CBD5004D1C70 /* gettext.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = gettext.h; path = ../lib/framework/gettext.h; sourceTree = SOURCE_ROOT; };
@@ -1281,10 +1282,8 @@
 		0246A0E20BD3CC0B004D1C70 /* parser.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = parser.h; path = ../lib/gamelib/parser.h; sourceTree = SOURCE_ROOT; };
 		0246A0EA0BD3CC29004D1C70 /* bitimage.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = bitimage.cpp; path = ../lib/ivis_opengl/bitimage.cpp; sourceTree = SOURCE_ROOT; };
 		0246A0EB0BD3CC29004D1C70 /* bitimage.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = bitimage.h; path = ../lib/ivis_opengl/bitimage.h; sourceTree = SOURCE_ROOT; };
-		0246A0EE0BD3CC29004D1C70 /* imd.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = imd.cpp; path = ../lib/ivis_opengl/imd.cpp; sourceTree = SOURCE_ROOT; };
 		0246A0EF0BD3CC29004D1C70 /* imd.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = imd.h; path = ../lib/ivis_opengl/imd.h; sourceTree = SOURCE_ROOT; };
 		0246A0F00BD3CC29004D1C70 /* imdload.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = imdload.cpp; path = ../lib/ivis_opengl/imdload.cpp; sourceTree = SOURCE_ROOT; };
-		0246A0F10BD3CC29004D1C70 /* ivi.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = ivi.h; path = ../lib/ivis_opengl/ivi.h; sourceTree = SOURCE_ROOT; };
 		0246A0F20BD3CC29004D1C70 /* ivisdef.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = ivisdef.h; path = ../lib/ivis_opengl/ivisdef.h; sourceTree = SOURCE_ROOT; };
 		0246A0F50BD3CC29004D1C70 /* pieblitfunc.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = pieblitfunc.h; path = ../lib/ivis_opengl/pieblitfunc.h; sourceTree = SOURCE_ROOT; };
 		0246A0F60BD3CC29004D1C70 /* pieclip.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = pieclip.cpp; path = ../lib/ivis_opengl/pieclip.cpp; sourceTree = SOURCE_ROOT; };
@@ -1293,10 +1292,8 @@
 		0246A0F90BD3CC29004D1C70 /* piefunc.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = piefunc.h; path = ../lib/ivis_opengl/piefunc.h; sourceTree = SOURCE_ROOT; };
 		0246A0FA0BD3CC29004D1C70 /* piemode.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = piemode.h; path = ../lib/ivis_opengl/piemode.h; sourceTree = SOURCE_ROOT; };
 		0246A0FB0BD3CC29004D1C70 /* piepalette.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = piepalette.h; path = ../lib/ivis_opengl/piepalette.h; sourceTree = SOURCE_ROOT; };
-		0246A1000BD3CC29004D1C70 /* rendmode.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = rendmode.h; path = ../lib/ivis_opengl/rendmode.h; sourceTree = SOURCE_ROOT; };
 		0246A1010BD3CC29004D1C70 /* tex.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = tex.h; path = ../lib/ivis_opengl/tex.h; sourceTree = SOURCE_ROOT; };
 		0246A1020BD3CC29004D1C70 /* textdraw.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = textdraw.h; path = ../lib/ivis_opengl/textdraw.h; sourceTree = SOURCE_ROOT; };
-		0246A10B0BD3CC43004D1C70 /* ivi.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = ivi.cpp; path = ../lib/ivis_opengl/ivi.cpp; sourceTree = SOURCE_ROOT; };
 		0246A10C0BD3CC43004D1C70 /* pieblitfunc.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = pieblitfunc.cpp; path = ../lib/ivis_opengl/pieblitfunc.cpp; sourceTree = SOURCE_ROOT; };
 		0246A10D0BD3CC43004D1C70 /* piedraw.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = piedraw.cpp; path = ../lib/ivis_opengl/piedraw.cpp; sourceTree = SOURCE_ROOT; };
 		0246A10E0BD3CC43004D1C70 /* piefunc.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = piefunc.cpp; path = ../lib/ivis_opengl/piefunc.cpp; sourceTree = SOURCE_ROOT; };
@@ -1305,7 +1302,6 @@
 		0246A1110BD3CC43004D1C70 /* piemode.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = piemode.cpp; path = ../lib/ivis_opengl/piemode.cpp; sourceTree = SOURCE_ROOT; };
 		0246A1120BD3CC43004D1C70 /* piepalette.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = piepalette.cpp; path = ../lib/ivis_opengl/piepalette.cpp; sourceTree = SOURCE_ROOT; };
 		0246A1130BD3CC43004D1C70 /* piestate.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = piestate.cpp; path = ../lib/ivis_opengl/piestate.cpp; sourceTree = SOURCE_ROOT; };
-		0246A1170BD3CC43004D1C70 /* rendmode.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = rendmode.cpp; path = ../lib/ivis_opengl/rendmode.cpp; sourceTree = SOURCE_ROOT; };
 		0246A1180BD3CC43004D1C70 /* screen.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = screen.cpp; path = ../lib/ivis_opengl/screen.cpp; sourceTree = SOURCE_ROOT; };
 		0246A1190BD3CC43004D1C70 /* screen.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = screen.h; path = ../lib/ivis_opengl/screen.h; sourceTree = SOURCE_ROOT; };
 		0246A11A0BD3CC43004D1C70 /* tex.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = tex.cpp; path = ../lib/ivis_opengl/tex.cpp; sourceTree = SOURCE_ROOT; };
@@ -1854,6 +1850,11 @@
 		43C3B9C0118BEBE0000BBE59 /* barkmel.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = barkmel.c; path = external/libvorbis/lib/barkmel.c; sourceTree = SOURCE_ROOT; };
 		43C3B9C1118BEBE0000BBE59 /* psytune.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = psytune.c; path = external/libvorbis/lib/psytune.c; sourceTree = SOURCE_ROOT; };
 		43C3B9C2118BEBE0000BBE59 /* tone.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = tone.c; path = external/libvorbis/lib/tone.c; sourceTree = SOURCE_ROOT; };
+		43CB73D3181E0E0100D1D1DD /* miniupnpctypes.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = miniupnpctypes.h; path = ../3rdparty/miniupnpc/miniupnpctypes.h; sourceTree = SOURCE_ROOT; };
+		43CB73D4181E0E0100D1D1DD /* portlistingparse.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = portlistingparse.c; path = ../3rdparty/miniupnpc/portlistingparse.c; sourceTree = SOURCE_ROOT; };
+		43CB73D5181E0E0100D1D1DD /* portlistingparse.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = portlistingparse.h; path = ../3rdparty/miniupnpc/portlistingparse.h; sourceTree = SOURCE_ROOT; };
+		43CB73D6181E0E0100D1D1DD /* receivedata.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = receivedata.c; path = ../3rdparty/miniupnpc/receivedata.c; sourceTree = SOURCE_ROOT; };
+		43CB73D7181E0E0100D1D1DD /* receivedata.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = receivedata.h; path = ../3rdparty/miniupnpc/receivedata.h; sourceTree = SOURCE_ROOT; };
 		43CCDC9414BA3AC800B21363 /* glc.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = glc.h; path = ../3rdparty/quesoglc/GL/glc.h; sourceTree = SOURCE_ROOT; };
 		43CCDC9614BA3B2100B21363 /* context.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = context.c; path = ../3rdparty/quesoglc/context.c; sourceTree = SOURCE_ROOT; };
 		43CCDC9714BA3B2100B21363 /* database.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = database.c; path = ../3rdparty/quesoglc/database.c; sourceTree = SOURCE_ROOT; };
@@ -2339,7 +2340,6 @@
 				0246A0A00BD3CBD5004D1C70 /* debug.h */,
 				0246A0A30BD3CBD5004D1C70 /* frame.cpp */,
 				0246A0A40BD3CBD5004D1C70 /* frame.h */,
-				0246A0A50BD3CBD5004D1C70 /* frameint.h */,
 				0246A0A60BD3CBD5004D1C70 /* frameresource.cpp */,
 				0246A0A70BD3CBD5004D1C70 /* frameresource.h */,
 				0246A0A80BD3CBD5004D1C70 /* gettext.h */,
@@ -2386,10 +2386,8 @@
 				43A29BF61503C9F700E66094 /* pietypes.h */,
 				0246A0EA0BD3CC29004D1C70 /* bitimage.cpp */,
 				0246A0EB0BD3CC29004D1C70 /* bitimage.h */,
-				0246A0EE0BD3CC29004D1C70 /* imd.cpp */,
 				0246A0EF0BD3CC29004D1C70 /* imd.h */,
 				0246A0F00BD3CC29004D1C70 /* imdload.cpp */,
-				0246A0F10BD3CC29004D1C70 /* ivi.h */,
 				0246A0F20BD3CC29004D1C70 /* ivisdef.h */,
 				43C2711C11DD308D009BC740 /* jpeg_encoder.cpp */,
 				43C2711D11DD308D009BC740 /* jpeg_encoder.h */,
@@ -2402,10 +2400,8 @@
 				0246A0FB0BD3CC29004D1C70 /* piepalette.h */,
 				02C8AEF60BE68A5600E9D8A7 /* png_util.cpp */,
 				02C8AEF70BE68A5600E9D8A7 /* png_util.h */,
-				0246A1000BD3CC29004D1C70 /* rendmode.h */,
 				0246A1010BD3CC29004D1C70 /* tex.h */,
 				0246A1020BD3CC29004D1C70 /* textdraw.h */,
-				0246A10B0BD3CC43004D1C70 /* ivi.cpp */,
 				0246A10C0BD3CC43004D1C70 /* pieblitfunc.cpp */,
 				0246A10D0BD3CC43004D1C70 /* piedraw.cpp */,
 				0246A10E0BD3CC43004D1C70 /* piefunc.cpp */,
@@ -2414,7 +2410,6 @@
 				0246A1110BD3CC43004D1C70 /* piemode.cpp */,
 				0246A1120BD3CC43004D1C70 /* piepalette.cpp */,
 				0246A1130BD3CC43004D1C70 /* piestate.cpp */,
-				0246A1170BD3CC43004D1C70 /* rendmode.cpp */,
 				0246A1180BD3CC43004D1C70 /* screen.cpp */,
 				0246A1190BD3CC43004D1C70 /* screen.h */,
 				0246A11A0BD3CC43004D1C70 /* tex.cpp */,
@@ -3286,6 +3281,11 @@
 		43C18F79114FF38B0028741B /* MiniUPnPc sources */ = {
 			isa = PBXGroup;
 			children = (
+				43CB73D3181E0E0100D1D1DD /* miniupnpctypes.h */,
+				43CB73D4181E0E0100D1D1DD /* portlistingparse.c */,
+				43CB73D5181E0E0100D1D1DD /* portlistingparse.h */,
+				43CB73D6181E0E0100D1D1DD /* receivedata.c */,
+				43CB73D7181E0E0100D1D1DD /* receivedata.h */,
 				43D338561364F5A8005F6725 /* connecthostport.c */,
 				43D338571364F5A8005F6725 /* connecthostport.h */,
 				43C18F7A114FF38B0028741B /* bsdqueue.h */,
@@ -3685,6 +3685,9 @@
 				431843DB136395C400BA2BC5 /* upnperrors.h in Headers */,
 				431843DD136395C600BA2BC5 /* upnpreplyparse.h in Headers */,
 				43D338591364F5A8005F6725 /* connecthostport.h in Headers */,
+				43CB73D8181E0E0100D1D1DD /* miniupnpctypes.h in Headers */,
+				43CB73DA181E0E0100D1D1DD /* portlistingparse.h in Headers */,
+				43CB73DC181E0E0100D1D1DD /* receivedata.h in Headers */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -4055,7 +4058,7 @@
 				ORGANIZATIONNAME = net.wz2100.;
 			};
 			buildConfigurationList = 02356D670BD3BB2600E9A019 /* Build configuration list for PBXProject "Warzone" */;
-			compatibilityVersion = "Xcode 3.1";
+			compatibilityVersion = "Xcode 3.2";
 			developmentRegion = English;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -4727,7 +4730,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "cd ${SRCROOT}/external/libvorbis\n\nif [ -f \"vorbis.diff\" ]; then\n\texit 0\nfi\n\nif ! curl -LfOC - --connect-timeout \"30\" \"http://wz2100.net/~dak180/BuildTools/Mac/vorbis.diff\"; then\n\techo \"error: Unable to fetch vorbis.diff\" >&2\n\texit 1\nfi\n\nif ! cat \"vorbis.diff\" | patch --posix -sNfp0; then\n\techo \"error: Unable to apply vorbis.diff\" >&2\n\texit 1\nfi\n\nexit 0\n";
+			shellScript = "cd ${SRCROOT}/external/libvorbis\n\nif [ -f \"vorbis.diff\" ]; then\n\texit 0\nfi\n\nif ! curl -LfOC - --connect-timeout \"30\" \"https://gist.github.com/dak180/5917767/raw/47475c026c73873da7e9f1c4a457173050f87698/vorbis.diff\"; then\n\tif ! curl -LfOC - --connect-timeout \"30\" \"http://wz2100.net/~dak180/BuildTools/Mac/vorbis.diff\"; then\n\t\techo \"error: Unable to fetch vorbis.diff\" >&2\n\t\texit 1\n\tfi\nfi\n\nif ! cat \"vorbis.diff\" | patch --posix -sNfp0; then\n\techo \"error: Unable to apply vorbis.diff\" >&2\n\texit 1\nfi\n\nexit 0\n";
 		};
 		43B8FF2D127CD57D006F5A13 /* Fonts */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -4880,10 +4883,8 @@
 				0246A0E40BD3CC0B004D1C70 /* animobj.cpp in Sources */,
 				0246A0E70BD3CC0B004D1C70 /* gtime.cpp in Sources */,
 				0246A1030BD3CC29004D1C70 /* bitimage.cpp in Sources */,
-				0246A1040BD3CC29004D1C70 /* imd.cpp in Sources */,
 				0246A1050BD3CC29004D1C70 /* imdload.cpp in Sources */,
 				0246A1070BD3CC29004D1C70 /* pieclip.cpp in Sources */,
-				0246A11D0BD3CC43004D1C70 /* ivi.cpp in Sources */,
 				0246A11E0BD3CC43004D1C70 /* pieblitfunc.cpp in Sources */,
 				0246A11F0BD3CC43004D1C70 /* piedraw.cpp in Sources */,
 				0246A1200BD3CC43004D1C70 /* piefunc.cpp in Sources */,
@@ -4891,7 +4892,6 @@
 				0246A1220BD3CC43004D1C70 /* piemode.cpp in Sources */,
 				0246A1230BD3CC43004D1C70 /* piepalette.cpp in Sources */,
 				0246A1240BD3CC43004D1C70 /* piestate.cpp in Sources */,
-				0246A1270BD3CC43004D1C70 /* rendmode.cpp in Sources */,
 				0246A1280BD3CC43004D1C70 /* screen.cpp in Sources */,
 				0246A1290BD3CC43004D1C70 /* tex.cpp in Sources */,
 				0246A12A0BD3CC43004D1C70 /* textdraw.cpp in Sources */,
@@ -5182,6 +5182,8 @@
 				431843DA136395C300BA2BC5 /* upnperrors.c in Sources */,
 				431843DC136395C500BA2BC5 /* upnpreplyparse.c in Sources */,
 				43D338581364F5A8005F6725 /* connecthostport.c in Sources */,
+				43CB73D9181E0E0100D1D1DD /* portlistingparse.c in Sources */,
+				43CB73DB181E0E0100D1D1DD /* receivedata.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

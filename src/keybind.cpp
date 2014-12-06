@@ -182,6 +182,11 @@ void	kf_ToggleShowPath(void)
 	showPath = !showPath;
 }
 
+void kf_PerformanceSample()
+{
+	wzPerfStart();
+}
+
 // --------------------------------------------------------------------------
 void	kf_ToggleRadarJump( void )
 {
@@ -581,11 +586,6 @@ void kf_ToggleOrders(void)	// Displays orders & action of currently selected uni
 		CONPRINTF(ConsoleString, (ConsoleString, "Unit Order/Action displayed is %s", showORDERS ? "Enabled" : "Disabled"));
 }
 
-void kf_ToggleLevelName(void) // toggles level name 
-{
-	showLevelName = !showLevelName;
-}
-
 /* Writes out the frame rate */
 void	kf_FrameRate( void )
 {
@@ -675,8 +675,7 @@ void	kf_RecalcLighting( void )
 /* Sends the screen buffer to disk */
 void	kf_ScreenDump( void )
 {
-	//CONPRINTF(ConsoleString,(ConsoleString,"Screen dump written to working directory : %s", screenDumpToDisk()));
-	screenDumpToDisk(ScreenDumpPath);
+	screenDumpToDisk(ScreenDumpPath, getLevelName());
 }
 
 // --------------------------------------------------------------------------
@@ -805,21 +804,6 @@ void	kf_ToggleFog( void )
 	sasprintf((char**)&cmsg, _("(Player %u) is using cheat :%s"),
 		selectedPlayer, fogEnabled ? _("Fog on") : _("Fog off") );
 	sendTextMessage(cmsg, true);
-}
-
-// --------------------------------------------------------------------------
-
-void	kf_ToggleWidgets( void )
-{
-	if(getWidgetsStatus())
-	{
-		setWidgetsStatus(false);
-	}
-	else
-	{
-		setWidgetsStatus(true);
-	}
-//	addConsoleMessage("Widgets display toggled",DEFAULT_JUSTIFY,SYSTEM_MESSAGE);
 }
 
 // --------------------------------------------------------------------------
@@ -1210,14 +1194,14 @@ void	kf_ToggleDroidInfo( void )
 {
 	camToggleInfo();
 }
-// --------------------------------------------------------------------------
+
 void	kf_addInGameOptions( void )
 {
-		setWidgetsStatus(true);
-		if (!isInGamePopupUp)	// they can *only* quit when popup is up.
-		{
+	setWidgetsStatus(true);
+	if (!isInGamePopupUp)	// they can *only* quit when popup is up.
+	{
 		intAddInGameOptions();
-		}
+	}
 }
 
 // --------------------------------------------------------------------------
@@ -1655,10 +1639,6 @@ void	kf_JumpToUnassignedUnits( void )
 
 void	kf_ToggleOverlays( void )
 {
-		/* Make sure they're both the same */
-		/* Flip their states */
-//		radarOnScreen = !radarOnScreen;
-
 	if(getWidgetsStatus())
 	{
 		setWidgetsStatus(false);
@@ -1667,30 +1647,7 @@ void	kf_ToggleOverlays( void )
 	{
 		setWidgetsStatus(true);
 	}
-
 }
-
-void	kf_SensorDisplayOn( void )
-{
-	// Now a placeholder for future stuff
-}
-
-void	kf_SensorDisplayOff( void )
-{
-	// Now a placeholder for future stuff
-}
-
-
-// --------------------------------------------------------------------------
-/*
-#define IDRET_OPTIONS		2		// option button
-#define IDRET_BUILD			3		// build button
-#define IDRET_MANUFACTURE	4		// manufacture button
-#define IDRET_RESEARCH		5		// research button
-#define IDRET_INTEL_MAP		6		// intelligence map button
-#define IDRET_DESIGN		7		// design droids button
-#define IDRET_CANCEL		8		// central cancel button
-*/
 
 // --------------------------------------------------------------------------
 void	kf_ChooseCommand( void )
@@ -1784,7 +1741,6 @@ void	kf_ToggleDrivingMode( void )
 // --------------------------------------------------------------------------
 void	kf_MovePause( void )
 {
-
 	if(!bMultiPlayer)	// can't do it in multiplay
 	{
 		if(!bMovePause)
@@ -2447,7 +2403,7 @@ static void kfsf_SetSelectedDroidsState( SECONDARY_ORDER sec, SECONDARY_STATE st
 	for(psDroid = apsDroidLists[selectedPlayer]; psDroid; psDroid = psDroid->psNext)
 	{
 		// Only set the state if it's not a transporter.
-		if (psDroid->selected && psDroid->droidType != DROID_TRANSPORTER && psDroid->droidType != DROID_SUPERTRANSPORTER)
+		if (psDroid->selected && !isTransporter(psDroid))
 		{
 			secondarySetState(psDroid,sec,state);
 		}

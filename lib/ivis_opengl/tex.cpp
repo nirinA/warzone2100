@@ -41,8 +41,6 @@ struct iTexPage
 
 QList<iTexPage> _TEX_PAGE;
 
-static void pie_PrintLoadedTextures(void);
-
 //*************************************************************************
 
 GLuint pie_Texture(int page)
@@ -65,120 +63,56 @@ int pie_ReserveTexture(const char *name)
 	return _TEX_PAGE.size() - 1;
 }
 
-/**************************************************************************
-	Add an image buffer given in s as a new texture page in the texture
-	table.  We check first if the given image has already been loaded,
-	as a sanity check (should never happen).  The texture numbers are
-	stored in a special texture table, not in the resource system, for
-	some unknown reason. Start looking for an available slot in the
-	texture table at the given slot number.
-
-	Returns the texture number of the image.
-**************************************************************************/
-int pie_AddTexPage(iV_Image *s, const char* filename, int slot, int maxTextureSize, bool useMipmaping)
+int pie_AddTexPage(iV_Image *s, const char* filename, bool gameTexture, int page)
 {
-	unsigned int i = 0;
-	int width, height;
-	void *bmp;
-	bool scaleDown = false;
-	GLint minfilter;
-	iTexPage tex;
-	int page = -1;
-
 	ASSERT(s && filename, "Bad input parameter");
 
-	/* Have we already loaded this one? Should not happen here. */
-	while (i < _TEX_PAGE.size())
+	if (page < 0)
 	{
-		if (strncmp(filename, _TEX_PAGE[i].name, iV_TEXNAME_MAX) == 0)
-		{
-			pie_PrintLoadedTextures();
-		}
-		ASSERT(strncmp(filename, _TEX_PAGE[i].name, iV_TEXNAME_MAX) != 0,
-		       "pie_AddTexPage: %s loaded again! Already loaded as %s|%u", filename,
-		       _TEX_PAGE[i].name, i);
-		i++;
+		iTexPage tex;
+		page = _TEX_PAGE.size();
+		glGenTextures(1, &tex.id);
+		sstrcpy(tex.name, filename);
+		_TEX_PAGE.append(tex);
 	}
+	else // replace
+	{
+		sstrcpy(_TEX_PAGE[page].name, filename);
 
-	page = _TEX_PAGE.size();
-	debug(LOG_TEXTURE, "pie_AddTexPage: %s page=%d", filename, page);
-
-	/* Stick the name into the tex page structures */
-	sstrcpy(tex.name, filename);
-
-	glGenTextures(1, &tex.id);
-
-	_TEX_PAGE.append(tex);
+	}
+	debug(LOG_TEXTURE, "%s page=%d", filename, page);
 
 	pie_SetTexturePage(page);
-
-	width = s->width;
-	height = s->height;
-	bmp = s->bmp;
-	if ((width & (width-1)) == 0 && (height & (height-1)) == 0)
+	if (GLEW_VERSION_4_3 || GLEW_KHR_debug)
 	{
-		if (maxTextureSize > 0 && width > maxTextureSize)
-		{
-			width = maxTextureSize;
-			scaleDown = true;
-		}
-		if (maxTextureSize > 0 && height > maxTextureSize)
-		{
-			height = maxTextureSize;
-			scaleDown = true;
-		}
-		if (scaleDown)
-		{
-			debug(LOG_TEXTURE, "scaling down texture %s from %ix%i to %ix%i", filename, s->width, s->height, width, height);
-			bmp = malloc(4 * width * height); // FIXME: don't know for sure it is 4 bytes per pixel
-			gluScaleImage(iV_getPixelFormat(s), s->width, s->height, GL_UNSIGNED_BYTE, s->bmp,
-			                                    width,    height,    GL_UNSIGNED_BYTE, bmp);
-			free(s->bmp);
-		}
+		glObjectLabel(GL_TEXTURE, pie_Texture(page), -1, filename);
+	}
 
-		if (maxTextureSize)
-		{
-			// this is a 3D texture, use texture compression
-			gluBuild2DMipmaps(GL_TEXTURE_2D, wz_texture_compression, width, height, iV_getPixelFormat(s), GL_UNSIGNED_BYTE, bmp);
-		}
-		else
-		{
-			// this is an interface texture, do not use compression
-			gluBuild2DMipmaps(GL_TEXTURE_2D, GL_RGBA, width, height, iV_getPixelFormat(s), GL_UNSIGNED_BYTE, bmp);
-		}
-	}
-	else
+	if (gameTexture) // this is a game texture, use texture compression
 	{
-		debug(LOG_ERROR, "pie_AddTexPage: non POT texture %s", filename);
+		gluBuild2DMipmaps(GL_TEXTURE_2D, wz_texture_compression, s->width, s->height, iV_getPixelFormat(s), GL_UNSIGNED_BYTE, s->bmp);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
 	}
-	
+	else	// this is an interface texture, do not use compression
+	{
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, s->width, s->height, 0, iV_getPixelFormat(s), GL_UNSIGNED_BYTE, s->bmp);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	}
 	// it is uploaded, we do not need it anymore
-	free(bmp); 
+	free(s->bmp);
 	s->bmp = NULL;
 
-	if (useMipmaping)
-	{
-		minfilter = GL_LINEAR_MIPMAP_LINEAR;
-	}
-	else
-	{
-		minfilter = GL_LINEAR;
-	}
-
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, minfilter);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
 	// Use anisotropic filtering, if available, but only max 4.0 to reduce processor burden
 	if (GLEW_EXT_texture_filter_anisotropic)
 	{
 		GLfloat max;
-
 		glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &max);
 		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, MIN(4.0f, max));
 	}
-
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
 	/* Send back the texpage number so we can store it in the IMD */
 	return page;
@@ -215,18 +149,6 @@ void pie_MakeTexPageTCMaskName(char * filename)
 		for ( i = 5; i < iV_TEXNAME_MAX-1 && isdigit(filename[i]); i++) {}
 		filename[i] = '\0';
 		strcat(filename, iV_TEXNAME_TCSUFFIX);
-	}
-}
-
-/*!
- * Print the names of all loaded textures to LOG_ERROR
- */
-static void pie_PrintLoadedTextures(void)
-{
-	debug(LOG_ERROR, "Texture pages in memory: %u", _TEX_PAGE.size());
-	for (int i = 0; i < _TEX_PAGE.size() && _TEX_PAGE[i].name[0] != '\0'; i++ )
-	{
-		debug(LOG_ERROR, "%02d : %s", i, _TEX_PAGE[i].name);
 	}
 }
 
@@ -267,33 +189,40 @@ int iV_GetTexture(const char *filename)
 	}
 	sstrcpy(path, filename);
 	pie_MakeTexPageName(path);
-	return pie_AddTexPage(&sSprite, path, 0, -1, true);	// FIXME, -1, use getTextureSize()
+	return pie_AddTexPage(&sSprite, path, true);
 }
 
-
-/**************************************************************************
-	WRF files may specify overrides for the textures on a map. This
-	is done through an ugly hack involving cutting the texture name
-	down to just "page-NN", where NN is the page number, and
-	replaceing the texture page with the same name if another file
-	with this prefix is loaded.
-**************************************************************************/
-int pie_ReplaceTexPage(iV_Image *s, const char *texPage, int maxTextureSize, bool useMipmaping)
+bool replaceTexture(const QString &oldfile, const QString &newfile)
 {
-	int i = iV_GetTexture(texPage);
+	char tmpname[iV_TEXNAME_MAX];
 
-	ASSERT(i >= 0, "pie_ReplaceTexPage: Cannot find any %s to replace!", texPage);
-	if (i < 0)
+	// Load new one to replace it
+	iV_Image image;
+	if (!iV_loadImage_PNG(QString("texpages/" + newfile).toUtf8().constData(), &image))
 	{
-		return -1;
+		debug(LOG_ERROR, "Failed to load image: %s", newfile.toUtf8().constData());
+		return false;
 	}
-
-	glDeleteTextures(1, &_TEX_PAGE[i].id);
-	debug(LOG_TEXTURE, "Reloading texture %s from index %d", texPage, i);
-	_TEX_PAGE[i].name[0] = '\0';
-	pie_AddTexPage(s, texPage, i, maxTextureSize, useMipmaping);
-
-	return i;
+	sstrcpy(tmpname, oldfile.toUtf8().constData());
+	pie_MakeTexPageName(tmpname);
+	// Have we already loaded this one?
+	for (int i = 0; i < _TEX_PAGE.size(); i++)
+	{
+		if (strcmp(tmpname, _TEX_PAGE[i].name) == 0)
+		{
+			GL_DEBUG("Replacing texture");
+			debug(LOG_TEXTURE, "Replacing texture %s with %s from index %d (tex id %u)", _TEX_PAGE[i].name, newfile.toUtf8().constData(), i, _TEX_PAGE[i].id);
+			sstrcpy(tmpname, newfile.toUtf8().constData());
+			pie_MakeTexPageName(tmpname);
+			pie_AddTexPage(&image, tmpname, true, i);
+			iV_unloadImage(&image);
+			glErrors();
+			return true;
+		}
+	}
+	iV_unloadImage(&image);
+	debug(LOG_ERROR, "Nothing to replace!");
+	return false;
 }
 
 void pie_TexShutDown(void)
@@ -313,7 +242,6 @@ void pie_TexInit(void)
 	debug(LOG_TEXTURE, "pie_TexInit successful");
 }
 
-
 void iV_unloadImage(iV_Image *image)
 {
 	if (image)
@@ -329,7 +257,6 @@ void iV_unloadImage(iV_Image *image)
 		debug(LOG_ERROR, "Tried to free invalid image!");
 	}
 }
-
 
 unsigned int iV_getPixelFormat(const iV_Image *image)
 {

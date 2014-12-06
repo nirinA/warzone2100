@@ -25,6 +25,7 @@
 #include "lib/framework/frame.h"
 #include "lib/framework/wzapp.h"
 #include "lib/framework/strres.h"
+#include "lib/framework/physfs_ext.h"
 #include "lib/widget/button.h"
 #include "lib/widget/widget.h"
 
@@ -59,7 +60,6 @@
 #include "keymap.h"
 #include "keybind.h"
 #include "loop.h"
-#include "lib/framework/frameint.h"
 #include "frontend.h"
 
 // ////////////////////////////////////////////////////////////////////////////
@@ -235,7 +235,16 @@ void displayRequestOption(WIDGET *psWidget, UDWORD xOffset, UDWORD yOffset)
 	drawBlueBox(x, y, psWidget->width(), psWidget->height());
 
 	iV_SetFont(font_regular);					// font
-	iV_SetTextColour(WZCOL_TEXT_BRIGHT);
+
+	if (mapData && CheckForMod(mapData->realFileName))
+	{
+		iV_SetTextColour(WZCOL_RED);
+	}
+	else
+	{
+		iV_SetTextColour(WZCOL_TEXT_BRIGHT);
+	}
+
 
 	while (iV_GetTextWidth(butString) > psWidget->width() - 10)
 	{
@@ -773,7 +782,6 @@ static void displayMultiPlayer(WIDGET *psWidget, UDWORD xOffset, UDWORD yOffset)
 	// Let's use the real score for MP games
 	if (NetPlay.bComms)
 	{
-		//c8:score,
 		if (Cheated)
 		{
 			sprintf(str, "(cheated)");
@@ -867,7 +875,7 @@ static void displayMultiPlayer(WIDGET *psWidget, UDWORD xOffset, UDWORD yOffset)
 			position.z = 4100;
 		}
 
-		displayComponentButtonObject(displayDroid, &rotation, &position, false, 100);
+		displayComponentButtonObject(displayDroid, &rotation, &position, 100);
 	}
 	else if (apsDroidLists[player])
 	{
@@ -968,12 +976,6 @@ static void addMultiPlayer(UDWORD player,UDWORD pos)
 	sFormInit.pDisplay		  = displayMultiPlayer;
 	sFormInit.UserData		  = player;
 	widgAddForm(psWScreen, &sFormInit);
-
-	//name,
-	//score,
-	//kills,
-	//ping
-	//ALL DONE IN THE DISPLAY FUNC.
 
 	W_BUTINIT sButInit;
 

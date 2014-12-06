@@ -281,7 +281,7 @@ static void sendGiftDroids(uint8_t from, uint8_t to)
 
 	for (psD = apsDroidLists[from]; psD && totalToSend != 0; psD = psD->psNext)
 	{
-		if ((psD->droidType == DROID_TRANSPORTER || psD->droidType == DROID_SUPERTRANSPORTER)
+		if (isTransporter(psD)
 		 && !transporterIsEmpty(psD))
 		{
 			CONPRINTF(ConsoleString, (ConsoleString, _("Tried to give away a non-empty %s - but this is not allowed."), psD->aName));
@@ -616,11 +616,11 @@ void  technologyGiveAway(const STRUCTURE *pS)
  *  \param subType the type of feature to build
  *  \param x,y the coordinates to place the feature at
  */
-void sendMultiPlayerFeature(FEATURE_TYPE subType, uint32_t x, uint32_t y, uint32_t id)
+void sendMultiPlayerFeature(uint32_t ref, uint32_t x, uint32_t y, uint32_t id)
 {
 	NETbeginEncode(NETgameQueue(selectedPlayer), GAME_DEBUG_ADD_FEATURE);
 	{
-		NETenum(&subType);
+		NETuint32_t(&ref);
 		NETuint32_t(&x);
 		NETuint32_t(&y);
 		NETuint32_t(&id);
@@ -630,13 +630,12 @@ void sendMultiPlayerFeature(FEATURE_TYPE subType, uint32_t x, uint32_t y, uint32
 
 void recvMultiPlayerFeature(NETQUEUE queue)
 {
-	FEATURE_TYPE subType = FEAT_TREE;  // Dummy initialisation.
-	uint32_t     x, y, id;
+	uint32_t ref = 0xff, x =0, y = 0, id = 0;
 	unsigned int i;
 
 	NETbeginDecode(queue, GAME_DEBUG_ADD_FEATURE);
 	{
-		NETenum(&subType);
+		NETuint32_t(&ref);
 		NETuint32_t(&x);
 		NETuint32_t(&y);
 		NETuint32_t(&id);
@@ -653,7 +652,7 @@ void recvMultiPlayerFeature(NETQUEUE queue)
 	for (i = 0; i < numFeatureStats; ++i)
 	{
 		// If we found the correct feature type
-		if (asFeatureStats[i].subType == subType)
+		if (asFeatureStats[i].ref == ref)
 		{
 			// Create a feature of the specified type at the given location
 			FEATURE *result = buildFeature(&asFeatureStats[i], x, y, false);
@@ -661,53 +660,6 @@ void recvMultiPlayerFeature(NETQUEUE queue)
 			break;
 		}
 	}
-}
-
-bool addOilDrum(uint8_t count)
-{
-	syncDebug("Adding %d oil drums.", count);
-
-	int featureIndex;
-	for (featureIndex = 0; featureIndex < numFeatureStats && asFeatureStats[featureIndex].subType != FEAT_OIL_DRUM; ++featureIndex) {}
-	if (featureIndex >= numFeatureStats)
-	{
-		debug(LOG_WARNING, "No oil drum feature!");
-		return false;  // Return value ignored.
-	}
-
-	for (unsigned n = 0; n < count; ++n)
-	{
-		uint32_t x, y;
-		for (int i = 0; i < 3; ++i)  // try three times
-		{
-			// Between 10 and mapwidth - 10
-			x = gameRand(mapWidth - 20) + 10;
-			y = gameRand(mapHeight - 20) + 10;
-
-			if (pickATileGen(&x, &y, LOOK_FOR_EMPTY_TILE, zonedPAT))
-			{
-				break;
-			}
-			x = INVALID_XY;
-		}
-		if (x == INVALID_XY)
-		{
-			syncDebug("Did not find location for oil drum.");
-			debug(LOG_FEATURE, "Unable to find a free location.");
-			continue;
-		}
-		FEATURE *pF = buildFeature(&asFeatureStats[featureIndex], world_coord(x), world_coord(y), false);
-		if (pF)
-		{
-			pF->player = ANYPLAYER;
-			syncDebugFeature(pF, '+');
-		}
-		else
-		{
-			debug(LOG_ERROR, "Couldn't build oil drum?");
-		}
-	}
-	return true;
 }
 
 // ///////////////////////////////////////////////////////////////

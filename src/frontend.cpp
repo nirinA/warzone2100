@@ -116,20 +116,25 @@ static bool startTitleMenu(void)
 	addTextButton(FRONTEND_MULTIPLAYER, FRONTEND_POS3X, FRONTEND_POS3Y, _("Multi Player"), WBUT_TXTCENTRE);
 	addTextButton(FRONTEND_TUTORIAL, FRONTEND_POS4X, FRONTEND_POS4Y, _("Tutorial"), WBUT_TXTCENTRE);
 	addTextButton(FRONTEND_OPTIONS, FRONTEND_POS5X, FRONTEND_POS5Y, _("Options"), WBUT_TXTCENTRE);
-	addTextButton(FRONTEND_PLAYINTRO, FRONTEND_POS6X, FRONTEND_POS6Y, _("View Intro"), WBUT_TXTCENTRE);
-
+	if (PHYSFS_exists("sequences/devastation.ogg"))
+	{
+		addTextButton(FRONTEND_PLAYINTRO, FRONTEND_POS6X, FRONTEND_POS6Y, _("View Intro"), WBUT_TXTCENTRE);
+	}
+	else
+	{
+		addTextButton(FRONTEND_PLAYINTRO, FRONTEND_POS6X, FRONTEND_POS6Y, _("View Intro"), WBUT_TXTCENTRE|WBUT_DISABLE);
+		widgSetTip(psWScreen, FRONTEND_PLAYINTRO, _("Videos are missing, download them from http://wz2100.net"));
+	}
 	addTextButton(FRONTEND_QUIT, FRONTEND_POS7X, FRONTEND_POS7Y, _("Quit Game"), WBUT_TXTCENTRE);
 	addSideText(FRONTEND_SIDETEXT, FRONTEND_SIDEX, FRONTEND_SIDEY, _("MAIN MENU"));
 
 	addSmallTextButton(FRONTEND_HYPERLINK, FRONTEND_POS8X, FRONTEND_POS8Y, _("Official site: http://wz2100.net/"), 0);
-
+	addSmallTextButton(FRONTEND_DONATELINK, FRONTEND_POS8X + 360, FRONTEND_POS8Y, _("Donate: http://donations.wz2100.net/"), 0);
 	return true;
 }
 
 static void runHyperlink(void)
 {
-	//FIXME: There is no decent way we can re-init the display to switch to window or fullscreen within game. refs: screenToggleMode().
-
 #if defined(WZ_OS_WIN)
 	ShellExecuteW(NULL, L"open", L"http://wz2100.net/", NULL, NULL, SW_SHOWNORMAL);
 #elif defined (WZ_OS_MAC)
@@ -142,6 +147,19 @@ static void runHyperlink(void)
 #endif
 }
 
+static void rundonatelink(void)
+{
+#if defined(WZ_OS_WIN)
+	ShellExecuteW(NULL, L"open", L"http://donations.wz2100.net/", NULL, NULL, SW_SHOWNORMAL);
+#elif defined (WZ_OS_MAC)
+	// For the macs
+	system("open http://donations.wz2100.net");
+#else
+	// for linux
+	int stupidWarning = system("xdg-open http://donations.wz2100.net &");
+	(void)stupidWarning;  // Why is system() a warn_unused_result function..?
+#endif
+}
 
 bool runTitleMenu(void)
 {
@@ -171,6 +189,10 @@ bool runTitleMenu(void)
 		case FRONTEND_HYPERLINK:
 			runHyperlink();
 			break;
+		case FRONTEND_DONATELINK:
+			rundonatelink();
+			break;
+			
 		default:
 			break;
 	}
@@ -255,7 +277,7 @@ static void startSinglePlayerMenu(void)
 	addTextButton(FRONTEND_LOADGAME_MISSION, FRONTEND_POS5X,FRONTEND_POS5Y, _("Load Campaign Game"), WBUT_TXTCENTRE);
 	addTextButton(FRONTEND_LOADGAME_SKIRMISH, FRONTEND_POS6X,FRONTEND_POS6Y, _("Load Skirmish Game"), WBUT_TXTCENTRE);
 
-	addSideText	 (FRONTEND_SIDETEXT ,FRONTEND_SIDEX,FRONTEND_SIDEY,_("SINGLE PLAYER"));
+	addSideText(FRONTEND_SIDETEXT, FRONTEND_SIDEX, FRONTEND_SIDEY,_("SINGLE PLAYER"));
 	addMultiBut(psWScreen, FRONTEND_BOTFORM, FRONTEND_QUIT, 10, 10, 30, 29, P_("menu", "Return"), IMAGE_RETURN, IMAGE_RETURN_HI, IMAGE_RETURN_HI);
 	// show this only when the video sequences are not installed
 	if (!PHYSFS_exists("sequences/devastation.ogg"))
@@ -273,21 +295,17 @@ static QList<CAMPAIGN_FILE> readCampaignFiles()
 		CAMPAIGN_FILE c;
 		QString filename("campaigns/");
 		filename += *i;
-		if (!filename.endsWith(".ini"))
+		if (!filename.endsWith(".json"))
 		{
 			continue;
 		}
 		WzConfig ini(filename, WzConfig::ReadOnlyAndRequired);
-		ini.beginGroup("campaign");
 		c.name = ini.value("name").toString();
 		c.level = ini.value("level").toString();
 		c.package = ini.value("package").toString();
 		c.loading = ini.value("loading").toString();
-		ini.endGroup();
-		ini.beginGroup("intro");
 		c.video = ini.value("video").toString();
 		c.captions = ini.value("captions").toString();
-		ini.endGroup();
 		result += c;
 	}
 	PHYSFS_freeList(files);
@@ -515,11 +533,13 @@ bool runMultiPlayerMenu(void)
 	case FRONTEND_HOST:
 		// don't pretend we are running a network game. Really do it!
 		NetPlay.bComms = true; // use network = true
-		NETdiscoverUPnPDevices();
+		NetPlay.isUPNP_CONFIGURED = false;
+		NetPlay.isUPNP_ERROR = false;
 		ingame.bHostSetup = true;
 		bMultiPlayer = true;
 		bMultiMessages = true;
 		NETinit(true);
+		NETdiscoverUPnPDevices();
 		game.type = SKIRMISH;		// needed?
 		lastTitleMode = MULTI;
 		changeTitleMode(MULTIOPTION);
@@ -1416,10 +1436,9 @@ bool runGameOptionsMenu(void)
 		widgSetString(psWScreen, FRONTEND_COLOUR, _("Unit Colour:"));
 		widgSetString(psWScreen, FRONTEND_COLOUR_CAM, _("Campaign"));
 		widgSetString(psWScreen, FRONTEND_COLOUR_MP, _("Skirmish/Multiplayer"));
-		widgSetString(psWScreen, FRONTEND_DIFFICULTY, _("Difficulty"));
+		widgSetString(psWScreen, FRONTEND_DIFFICULTY, _("Campaign Difficulty"));
 		widgSetString(psWScreen, FRONTEND_SCROLLSPEED, _("Scroll Speed"));
-		widgSetString(psWScreen, FRONTEND_RADAR, _("Radar"));
-		widgSetString(psWScreen, FRONTEND_RADAR_R, rotateRadar ? _("Rotating") : _("Fixed"));
+
 		switch( getDifficultyLevel() )
 		{
 		case DL_EASY:
@@ -1574,7 +1593,7 @@ static void displayTitleBitmap(WZ_DECL_UNUSED WIDGET *psWidget, WZ_DECL_UNUSED U
 // show warzone logo
 static void displayLogo(WIDGET *psWidget, UDWORD xOffset, UDWORD yOffset)
 {
-	iV_DrawImageScaled(FrontImages, IMAGE_FE_LOGO, xOffset + psWidget->x(), yOffset + psWidget->y(), psWidget->width(), psWidget->height());
+	iV_DrawImage2("image_fe_logo.png", xOffset + psWidget->x(), yOffset + psWidget->y(), psWidget->width(), psWidget->height());
 }
 
 
@@ -1587,18 +1606,6 @@ static void displayBigSlider(WIDGET *psWidget, UDWORD xOffset, UDWORD yOffset)
 	int y = yOffset + psWidget->y();
 
 	iV_DrawImage(IntImages,IMAGE_SLIDER_BIG,x+STAT_SLD_OX,y+STAT_SLD_OY);			// draw bdrop
-
-	int sx = (Slider->width() - 3 - Slider->barSize) * Slider->pos / Slider->numStops;  // determine pos.
-	iV_DrawImage(IntImages,IMAGE_SLIDER_BIGBUT,x+3+sx,y+3);								//draw amount
-}
-
-static void displayAISlider(WIDGET *psWidget, UDWORD xOffset, UDWORD yOffset)
-{
-	W_SLIDER *Slider = (W_SLIDER*)psWidget;
-	int x = xOffset + psWidget->x();
-	int y = yOffset + psWidget->y();
-
-	iV_DrawImage(IntImages,IMAGE_SLIDER_AI,x+STAT_SLD_OX,y+STAT_SLD_OY);			// draw bdrop
 
 	int sx = (Slider->width() - 3 - Slider->barSize) * Slider->pos / Slider->numStops;  // determine pos.
 	iV_DrawImage(IntImages,IMAGE_SLIDER_BIGBUT,x+3+sx,y+3);								//draw amount
@@ -1663,7 +1670,7 @@ void displayTextOption(WIDGET *psWidget, UDWORD xOffset, UDWORD yOffset)
 		{
 			iV_SetTextColour(WZCOL_TEXT_BRIGHT);
 		}
-		else if (psWidget->id == FRONTEND_HYPERLINK)				// special case for our hyperlink										
+		else if (psWidget->id == FRONTEND_HYPERLINK || psWidget->id == FRONTEND_DONATELINK)				// special case for our hyperlink										
 		{
 			iV_SetTextColour(WZCOL_YELLOW);
 		}
@@ -1864,6 +1871,7 @@ void addSmallTextButton(UDWORD id,  UDWORD PosX, UDWORD PosY, const char *txt, u
 		widgSetButtonState(psWScreen, id, WBUT_DISABLE);
 	}
 }
+
 // ////////////////////////////////////////////////////////////////////////////
 void addFESlider(UDWORD id, UDWORD parent, UDWORD x, UDWORD y, UDWORD stops, UDWORD pos)
 {
@@ -1881,24 +1889,6 @@ void addFESlider(UDWORD id, UDWORD parent, UDWORD x, UDWORD y, UDWORD stops, UDW
 	sSldInit.pCallback  = intUpdateQuantitySlider;
 	widgAddSlider(psWScreen, &sSldInit);
 }
-
-void addFEAISlider(UDWORD id, UDWORD parent, UDWORD x, UDWORD y, UDWORD stops, UDWORD pos)
-{
-	W_SLDINIT sSldInit;
-	sSldInit.formID		= parent;
-	sSldInit.id			= id;
-	sSldInit.x			= (short)x;
-	sSldInit.y			= (short)y;
-	sSldInit.width		= iV_GetImageWidth(IntImages,IMAGE_SLIDER_BIG);
-	sSldInit.height		= iV_GetImageHeight(IntImages,IMAGE_SLIDER_BIG);
-	sSldInit.numStops	= (UBYTE) stops;
-	sSldInit.barSize	= iV_GetImageHeight(IntImages,IMAGE_SLIDER_BIG);
-	sSldInit.pos		= (UBYTE) pos;
-	sSldInit.pDisplay	= displayAISlider;
-	sSldInit.pCallback  = intUpdateQuantitySlider;
-	widgAddSlider(psWScreen, &sSldInit);
-}
-
 
 // ////////////////////////////////////////////////////////////////////////////
 // Change Mode

@@ -56,7 +56,7 @@ bool initScripts();
 bool shutdownScripts();
 
 /// Run after all data is loaded, but before game is started.
-bool prepareScripts();
+bool prepareScripts(bool loadGame);
 
 /// Run this each logical frame to update frame-dependent script states
 bool updateScripts();
@@ -115,5 +115,6 @@ bool triggerEventArea(QString label, DROID *psDroid);
 bool triggerEventSelected();
 bool triggerEventPlayerLeft(int id);
 bool triggerEventDesignCreated(DROID_TEMPLATE *psTemplate);
+bool triggerEventSyncRequest(int from, int req_id, int x, int y, BASE_OBJECT *psObj, BASE_OBJECT *psObj2);
 
 #endif

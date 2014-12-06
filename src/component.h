@@ -50,23 +50,30 @@ UDWORD getStructureStatSizeMax(STRUCTURE_STATS *Stats);
 #define SMALL_STRUCT_SCALE			(55)
 #define MED_STRUCT_SCALE			(25)//reduced from 30 to fit command centre in window
 #define LARGE_STRUCT_SCALE			(25)
+#define ULTRA_SMALL_FEATURE_SCALE	(146)
+#define REALLY_SMALL_FEATURE_SCALE	(116)
+#define SMALL_FEATURE_SCALE			(55)
+#define MED_FEATURE_SCALE			(26)
+#define LARGE_FEATURE_SCALE			(16)
 
 #define TOWER_HEIGHT    100
 UDWORD getStructureStatHeight(STRUCTURE_STATS *psStat);
 
-void displayIMDButton(iIMDShape *IMDShape, Vector3i *Rotation, Vector3i *Position, bool RotXYZ, SDWORD scale);
-void displayStructureButton(STRUCTURE *psStructure, Vector3i *Rotation, Vector3i *Position, bool RotXYZ, SDWORD scale);
-void displayStructureStatButton(STRUCTURE_STATS *Stats, Vector3i *Rotation, Vector3i *Position, bool RotXYZ, SDWORD scale);
-void displayComponentButton(BASE_STATS *Stat, Vector3i *Rotation, Vector3i *Position, bool RotXYZ, SDWORD scale);
-void displayResearchButton(BASE_STATS *Stat, Vector3i *Rotation, Vector3i *Position, bool RotXYZ, SDWORD scale);
-void displayComponentButtonTemplate(DROID_TEMPLATE *psTemplate, Vector3i *Rotation, Vector3i *Position, bool RotXYZ, SDWORD scale);
-void displayComponentButtonObject(DROID *psDroid, Vector3i *Rotation, Vector3i *Position, bool RotXYZ, SDWORD scale);
+void displayIMDButton(iIMDShape *IMDShape, const Vector3i *Rotation, const Vector3i *Position, int scale);
+void displayStructureButton(STRUCTURE *psStructure, const Vector3i *Rotation, const Vector3i *Position, int scale);
+void displayStructureStatButton(STRUCTURE_STATS *Stats, const Vector3i *Rotation, const Vector3i *Position, int scale);
+void displayComponentButton(BASE_STATS *Stat, const Vector3i *Rotation, const Vector3i *Position, int scale);
+void displayResearchButton(BASE_STATS *Stat, const Vector3i *Rotation, const Vector3i *Position, int scale);
+void displayComponentButtonTemplate(DROID_TEMPLATE *psTemplate, const Vector3i *Rotation, const Vector3i *Position, int scale);
+void displayComponentButtonObject(DROID *psDroid, const Vector3i *Rotation, const Vector3i *Position, int scale);
 void displayComponentObject(DROID *psDroid);
 
 void compPersonToBits(DROID *psDroid);
 
 SDWORD rescaleButtonObject(SDWORD radius, SDWORD baseScale,SDWORD baseRadius);
 void destroyFXDroid(DROID *psDroid, unsigned impactTime);
+
+void drawMuzzleFlash(WEAPON sWeap, iIMDShape *weaponImd, iIMDShape *flashImd, PIELIGHT buildingBrightness, int pieFlag, int pieFlagData, UBYTE colour = 0);
 
 /* Pass in the stats you're interested in and the COMPONENT - double reference, but works. NOTE: Unused!*/
 #define PART_IMD(STATS,DROID,COMPONENT,PLAYER)	(STATS[DROID->asBits[COMPONENT]].pIMD)

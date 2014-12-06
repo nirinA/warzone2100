@@ -38,7 +38,6 @@
 
 // FIXME Direct iVis implementation include!
 #include "lib/ivis_opengl/bitimage.h"
-#include "lib/ivis_opengl/rendmode.h"
 #include "lib/ivis_opengl/piematrix.h"
 
 #include "lib/framework/input.h"
@@ -876,6 +875,10 @@ void IntStatsButton::display(int xOffset, int yOffset)
 		{
 			object = ImdObject::DroidTemplate(Stat);
 		}
+		else if (StatIsFeature(Stat))
+		{
+			object = ImdObject::Feature(Stat);
+		}
 		else
 		{
 			compID = StatIsComponent(Stat); // This failes for viper body.
@@ -1154,125 +1157,6 @@ void intDisplayButtonFlash(WIDGET *psWidget, UDWORD xOffset, UDWORD yOffset)
 	iV_DrawImage(IntImages, ImageID, x, y);
 }
 
-void intDisplayReticuleButton(WIDGET *psWidget, UDWORD xOffset, UDWORD yOffset)
-{
-	int     x = xOffset + psWidget->x();
-	int     y = yOffset + psWidget->y();
-	bool	Hilight = false;
-	bool	Down = false;
-	UBYTE	DownTime = UNPACKDWORD_QUAD_C(psWidget->UserData);
-	UBYTE	Index = UNPACKDWORD_QUAD_D(psWidget->UserData);
-	UBYTE	flashing = UNPACKDWORD_QUAD_A(psWidget->UserData);
-	UBYTE	flashTime = UNPACKDWORD_QUAD_B(psWidget->UserData);
-	UWORD	ImageID;
-	ASSERT(psWidget->type == WIDG_BUTTON, "Not a button");
-	W_BUTTON *psButton = (W_BUTTON *)psWidget;
-
-	if (psButton->state & WBUT_DISABLE)
-	{
-		iV_DrawImage(IntImages, IMAGE_RETICULE_GREY, x, y);
-		return;
-	}
-
-	Down = psButton->state & (WBUT_DOWN | WBUT_CLICKLOCK);
-	Hilight = buttonIsHilite(psButton);
-
-	if (Down)
-	{
-		if ((DownTime < 1) && (Index != IMAGE_CANCEL_UP))
-		{
-			ImageID = IMAGE_RETICULE_BUTDOWN;	// Do the button flash.
-		}
-		else
-		{
-			ImageID = (UWORD)(Index + 1);					// It's down.
-		}
-		DownTime++;
-		//stop the reticule from flashing if it was
-		flashing = (UBYTE)false;
-	}
-	else
-	{
-		//flashing button?
-		if (flashing)
-		{
-			if (((realTime / 250) % 2) == 0)
-			{
-				ImageID = Index;
-			}
-			else
-			{
-				ImageID = (UWORD)(Index + 1);
-				flashTime = 0;
-			}
-			flashTime++;
-		}
-		else
-		{
-			DownTime = 0;
-			ImageID = Index;						// It's up.
-		}
-	}
-
-	iV_DrawImage(IntImages, ImageID, x, y);
-
-	if (Hilight)
-	{
-		if (Index == IMAGE_CANCEL_UP)
-		{
-			iV_DrawImage(IntImages, IMAGE_CANCEL_HILIGHT, x, y);
-		}
-		else
-		{
-			iV_DrawImage(IntImages, IMAGE_RETICULE_HILIGHT, x, y);
-		}
-	}
-
-	psWidget->UserData = PACKDWORD_QUAD(flashTime, flashing, DownTime, Index);
-}
-
-// Display one of three images depending on if the widget is currently depressed (ah!).
-//
-void intDisplayButtonPressed(WIDGET *psWidget, UDWORD xOffset, UDWORD yOffset)
-{
-	W_BUTTON	*psButton = (W_BUTTON *)psWidget;
-	UDWORD		x = xOffset + psButton->x();
-	UDWORD		y = yOffset + psButton->y();
-	UBYTE		Hilight = 0;
-	UWORD		ImageID;
-
-	if (psButton->state & (WBUT_DOWN | WBUT_LOCK | WBUT_CLICKLOCK))
-	{
-		ImageID = UNPACKDWORD_TRI_A(psWidget->UserData);
-	}
-	else
-	{
-		ImageID = UNPACKDWORD_TRI_C(psWidget->UserData);
-	}
-
-	Hilight = (UBYTE)buttonIsHilite(psButton);
-
-	iV_DrawImage(IntImages, ImageID, x, y);
-	if (Hilight)
-	{
-		iV_DrawImage(IntImages, UNPACKDWORD_TRI_B(psWidget->UserData), x, y);
-	}
-}
-
-void intDisplaySlider(WIDGET *psWidget, UDWORD xOffset, UDWORD yOffset)
-{
-	W_SLIDER *Slider = (W_SLIDER *)psWidget;
-	int x = xOffset + psWidget->x();
-	int y = yOffset + psWidget->y();
-
-	iV_DrawImage(IntImages, IMAGE_SLIDER_BACK, x + STAT_SLD_OX, y + STAT_SLD_OY);
-
-	int sx = (Slider->width() - Slider->barSize) * Slider->pos / Slider->numStops;
-
-	iV_DrawImage(IntImages, IMAGE_SLIDER_BUT, x + sx, y - 2);
-}
-
-
 /* display highlighted edit box from left, middle and end edit box graphics */
 void intDisplayEditBox(WIDGET *psWidget, UDWORD xOffset, UDWORD yOffset)
 {
@@ -1313,44 +1197,6 @@ void intDisplayEditBox(WIDGET *psWidget, UDWORD xOffset, UDWORD yOffset)
 
 	/* draw right side of bar */
 	iV_DrawImage(IntImages, iImageIDRight, iXRight, iY);
-}
-
-
-void intDisplayNumber(WIDGET *psWidget, UDWORD xOffset, UDWORD yOffset)
-{
-	W_LABEL		*Label = (W_LABEL *)psWidget;
-	UDWORD		x = Label->x() + xOffset;
-	UDWORD		y = Label->y() + yOffset;
-	UDWORD		Quantity = 1;
-
-	//Quantity depends on the factory
-	if (Label->pUserData != NULL)
-	{
-		STRUCTURE	*psStruct = (STRUCTURE *)Label->pUserData;
-		FACTORY		*psFactory = (FACTORY *)psStruct->pFunctionality;
-
-		if (psFactory && !psStruct->died)
-		{
-			Quantity = psFactory->productionLoops;
-		}
-	}
-
-	if (Quantity >= STAT_SLDSTOPS)
-	{
-		iV_DrawImage(IntImages, IMAGE_SLIDER_INFINITY, x + 4, y);
-	}
-	else
-	{
-		char tmp[20];
-		ssprintf(tmp, "%02u", Quantity);
-		Label->aText = QString::fromUtf8(tmp);
-
-		for (int i = 0; i < Label->aText.size(); ++i)
-		{
-			iV_DrawImage(IntImages, (UWORD)(IMAGE_0 + (Label->aText.toUtf8()[i] - '0')), x, y);
-			x += iV_GetImageWidth(IntImages, (UWORD)(IMAGE_0 + (Label->aText.toUtf8()[i] - '0'))) + 1;
-		}
-	}
 }
 
 // Initialise all the surfaces,graphics etc. used by the interface.
@@ -1459,7 +1305,7 @@ void IntFancyButton::displayIMD(Image image, ImdObject imdObject, int xOffset, i
 
 		if (IMDType == IMDTYPE_DROID)
 		{
-			if (((DROID *)Object)->droidType == DROID_TRANSPORTER || ((DROID *)Object)->droidType == DROID_SUPERTRANSPORTER)
+			if (isTransporter((DROID *)Object))
 			{
 				Position.x = 0;
 				Position.y = 0;
@@ -1505,11 +1351,11 @@ void IntFancyButton::displayIMD(Image image, ImdObject imdObject, int xOffset, i
 		//lefthand display droid buttons
 		if (IMDType == IMDTYPE_DROID)
 		{
-			displayComponentButtonObject((DROID *)Object, &Rotation, &Position, true, scale);
+			displayComponentButtonObject((DROID *)Object, &Rotation, &Position, scale);
 		}
 		else
 		{
-			displayComponentButtonTemplate((DROID_TEMPLATE *)Object, &Rotation, &Position, true, scale);
+			displayComponentButtonTemplate((DROID_TEMPLATE *)Object, &Rotation, &Position, scale);
 		}
 	}
 	else
@@ -1615,6 +1461,31 @@ void IntFancyButton::displayIMD(Image image, ImdObject imdObject, int xOffset, i
 				scale = LARGE_STRUCT_SCALE;
 			}
 		}
+		else if (IMDType == IMDTYPE_FEATURE)
+		{
+			int imdRadius = ((iIMDShape *)Object)->radius;
+
+			if (imdRadius <= 40)
+			{
+				scale = ULTRA_SMALL_FEATURE_SCALE;
+			}
+			else if (imdRadius <= 64)
+			{
+				scale = REALLY_SMALL_FEATURE_SCALE;
+			}
+			else if (imdRadius <= 128)
+			{
+				scale = SMALL_FEATURE_SCALE;
+			}
+			else if (imdRadius <= 256)
+			{
+				scale = MED_FEATURE_SCALE;
+			}
+			else
+			{
+				scale = LARGE_FEATURE_SCALE;
+			}
+		}
 		else
 		{
 			Radius = ((iIMDShape *)Object)->sradius;
@@ -1653,23 +1524,27 @@ void IntFancyButton::displayIMD(Image image, ImdObject imdObject, int xOffset, i
 		/* all non droid buttons */
 		if (IMDType == IMDTYPE_COMPONENT)
 		{
-			displayComponentButton((BASE_STATS *)Object, &Rotation, &Position, true, scale);
+			displayComponentButton((BASE_STATS *)Object, &Rotation, &Position, scale);
 		}
 		else if (IMDType == IMDTYPE_RESEARCH)
 		{
-			displayResearchButton((BASE_STATS *)Object, &Rotation, &Position, true, scale);
+			displayResearchButton((BASE_STATS *)Object, &Rotation, &Position, scale);
 		}
 		else if (IMDType == IMDTYPE_STRUCTURE)
 		{
-			displayStructureButton((STRUCTURE *)Object, &Rotation, &Position, true, scale);
+			displayStructureButton((STRUCTURE *)Object, &Rotation, &Position, scale);
 		}
 		else if (IMDType == IMDTYPE_STRUCTURESTAT)
 		{
-			displayStructureStatButton((STRUCTURE_STATS *)Object, &Rotation, &Position, true, scale);
+			displayStructureStatButton((STRUCTURE_STATS *)Object, &Rotation, &Position, scale);
+		}
+		else if (IMDType == IMDTYPE_FEATURE)
+		{
+			displayIMDButton((iIMDShape *)Object, &Rotation, &Position, scale);
 		}
 		else
 		{
-			displayIMDButton((iIMDShape *)Object, &Rotation, &Position, true, scale);
+			displayIMDButton((iIMDShape *)Object, &Rotation, &Position, scale);
 		}
 
 		pie_SetDepthBufferStatus(DEPTH_CMP_ALWAYS_WRT_ON);
@@ -2148,7 +2023,6 @@ void intDisplayDesignPowerBar(WIDGET *psWidget, UDWORD xOffset, UDWORD yOffset)
 	intDisplayBar(psWidget, xOffset, yOffset, true);
 }
 
-
 // Widget callback function to play an audio track.
 //
 #define WIDGETBEEPGAP (200)	// 200 milliseconds between each beep please
@@ -2385,14 +2259,6 @@ void intDisplayProximityBlips(WIDGET *psWidget, WZ_DECL_UNUSED UDWORD xOffset, W
 	}
 }
 
-
-static UDWORD sliderMousePos(W_SLIDER *Slider)
-{
-	return (Slider->parent()->x() + Slider->x())
-	       + ((Slider->pos * Slider->width()) / Slider->numStops);
-}
-
-
 static UWORD sliderMouseUnit(W_SLIDER *Slider)
 {
 	UWORD posStops = (UWORD)(Slider->numStops / 20);
@@ -2425,7 +2291,6 @@ void intUpdateQuantitySlider(WIDGET *psWidget, W_CONTEXT *psContext)
 			if (Slider->pos > 0)
 			{
 				Slider->pos = (UWORD)(Slider->pos - sliderMouseUnit(Slider));
-				setMousePos(sliderMousePos(Slider), mouseY());	// move mouse
 			}
 		}
 		else if (keyDown(KEY_RIGHTARROW))
@@ -2433,7 +2298,6 @@ void intUpdateQuantitySlider(WIDGET *psWidget, W_CONTEXT *psContext)
 			if (Slider->pos < Slider->numStops)
 			{
 				Slider->pos = (UWORD)(Slider->pos + sliderMouseUnit(Slider));
-				setMousePos(sliderMousePos(Slider), mouseY());	// move mouse
 			}
 		}
 	}

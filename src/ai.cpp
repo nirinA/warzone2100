@@ -614,7 +614,7 @@ int aiBestNearestTarget(DROID *psDroid, BASE_OBJECT **ppsObj, int weapon_slot, i
 					// if not electronic then valid target
 					if (!electronic
 					    || (electronic
-					        && (((DROID *)targetInQuestion)->droidType != DROID_TRANSPORTER && ((DROID *)targetInQuestion)->droidType != DROID_SUPERTRANSPORTER)))
+						&& !isTransporter((DROID *)targetInQuestion)))
 					{
 						//only a valid target if NOT a transporter
 						psTarget = targetInQuestion;
@@ -1183,6 +1183,20 @@ void aiUpdateDroid(DROID *psDroid)
 			}
 		}
 	}
+}
+
+/* Check if any of our weapons can hit the target... */
+bool checkAnyWeaponsTarget(BASE_OBJECT *psObject, BASE_OBJECT *psTarget)
+{
+	DROID *psDroid = (DROID *) psObject;
+	for (int i = 0;i < psDroid->numWeaps;i++)
+	{
+		if (validTarget(psObject, psTarget, i))
+		{
+			return true;
+		}
+	}
+	return false;
 }
 
 /* Set of rules which determine whether the weapon associated with the object can fire on the propulsion type of the target. */

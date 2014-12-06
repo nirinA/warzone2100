@@ -136,9 +136,6 @@ LOOP_MISSION_STATE		loopMissionState = LMS_NORMAL;
 // this is set by scrStartMission to say what type of new level is to be started
 LEVEL_TYPE nextMissionType = LDS_NONE;
 
- /* Force 3D display */
-UDWORD	mcTime;
-
 static GAMECODE renderLoop()
 {
 	if (bMultiPlayer && !NetPlay.isHostAlive && NetPlay.bComms && !NetPlay.isHost)
@@ -324,6 +321,7 @@ static GAMECODE renderLoop()
 			}
 			displayWorld();
 		}
+		wzPerfBegin(PERF_GUI, "User interface");
 		/* Display the in game interface */
 		pie_SetDepthBufferStatus(DEPTH_CMP_ALWAYS_WRT_ON);
 		pie_SetFogStatus(false);
@@ -340,6 +338,7 @@ static GAMECODE renderLoop()
 		}
 		pie_SetDepthBufferStatus(DEPTH_CMP_LEQ_WRT_ON);
 		pie_SetFogStatus(true);
+		wzPerfEnd(PERF_GUI);
 	}
 
 	pie_GetResetCounts(&loopPieCount, &loopPolyCount, &loopStateChanges);
@@ -354,6 +353,7 @@ static GAMECODE renderLoop()
 		/* Check for toggling display mode */
 		if ((keyDown(KEY_LALT) || keyDown(KEY_RALT)) && keyPressed(KEY_RETURN))
 		{
+			war_setFullscreen(!war_getFullscreen());
 			wzToggleFullscreen();
 		}
 	}
@@ -410,6 +410,7 @@ static GAMECODE renderLoop()
 		/* Check for toggling display mode */
 		if ((keyDown(KEY_LALT) || keyDown(KEY_RALT)) && keyPressed(KEY_RETURN))
 		{
+			war_setFullscreen(!war_getFullscreen());
 			wzToggleFullscreen();
 		}
 		return GAMECODE_QUITGAME;

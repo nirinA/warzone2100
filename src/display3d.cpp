@@ -38,6 +38,7 @@
 #include "lib/ivis_opengl/piemode.h"
 #include "lib/framework/fixedpoint.h"
 #include "lib/ivis_opengl/piefunc.h"
+#include "lib/ivis_opengl/screen.h"
 
 #include "lib/gamelib/gtime.h"
 #include "lib/gamelib/animobj.h"
@@ -94,6 +95,11 @@
 
 /********************  Prototypes  ********************/
 
+static void displayDelivPoints();
+static void displayProximityMsgs();
+static void displayDynamicObjects();
+static void displayStaticObjects();
+static void displayFeatures();
 static UDWORD	getTargettingGfx(void);
 static void	drawDroidGroupNumber(DROID *psDroid);
 static void	trackHeight(float desiredHeight);
@@ -102,7 +108,6 @@ static void	locateMouse(void);
 static bool	renderWallSection(STRUCTURE *psStructure);
 static void	drawDragBox(void);
 static void	calcFlagPosScreenCoords(SDWORD *pX, SDWORD *pY, SDWORD *pR);
-static void	displayTerrain(void);
 static void	drawTiles(iView *player);
 static void	display3DProjectiles(void);
 static void	drawDroidSelections(void);
@@ -127,8 +132,8 @@ static PIELIGHT getBlueprintColour(STRUCT_STATES state);
 
 static void NetworkDisplayPlainForm(WIDGET *psWidget, UDWORD xOffset, UDWORD yOffset);
 static void NetworkDisplayImage(WIDGET *psWidget, UDWORD xOffset, UDWORD yOffset);
-void NotifyUserOfError(char *msg);
 extern bool writeGameInfo(const char *pFileName); // Used to help debug issues when we have fatal errors & crash handler testing.
+
 /********************  Variables  ********************/
 // Should be cleaned up properly and be put in structures.
 
@@ -211,14 +216,10 @@ bool showSAMPLES = false;
  *  default OFF, turn ON via console command 'showorders'
  */
 bool showORDERS = false;
-/** Show the current level name on the screen, toggle via the 'showlevelname'
- *  console command
-*/
-bool showLevelName = true;
+
 /** When we have a connection issue, we will flash a message on screen
 */
-static bool errorWaiting = false;
-static char errorMessage[512];
+static const char *errorWaiting = NULL;
 static uint32_t lastErrorTime = 0;
 
 #define NETWORK_FORM_ID 0xFAAA
@@ -330,14 +331,6 @@ static inline void rotateSomething(int &x, int &y, uint16_t angle)
 	int newY = (x*sra + y*cra)>>16;
 	x = newX;
 	y = newY;
-}
-
-
-void NotifyUserOfError(char *msg)
-{
-	errorWaiting = true;
-	ssprintf(errorMessage, "%s", msg);
-	lastErrorTime = realTime;
 }
 
 static Blueprint getTileBlueprint(int mapX, int mapY)
@@ -677,7 +670,7 @@ static void setupConnectionStatusForm(void)
 /// Render the 3D world
 void draw3DScene( void )
 {
-	GL_DEBUG("Draw 3D scene - start");
+	wzPerfBegin(PERF_START_FRAME, "Start 3D scene");
 
 	/* What frame number are we on? */
 	currentGameFrame = frameGetFrameNumber();
@@ -705,8 +698,19 @@ void draw3DScene( void )
 	/* Set 3D world origins */
 	pie_SetGeometricOffset(rendSurface.width / 2, geoOffset);
 
-	// draw terrain
-	displayTerrain();
+	/* Now, draw the terrain */
+	drawTiles(&player);
+
+	wzPerfBegin(PERF_MISC, "3D scene - misc and text");
+
+	/* Show the drag Box if necessary */
+	drawDragBox();
+
+	/* Have we released the drag box? */
+	if(dragBox3D.status == DRAG_RELEASED)
+	{
+		dragBox3D.status = DRAG_INACTIVE;
+	}
 
 	pie_BeginInterface();
 	drawDroidSelections();
@@ -726,7 +730,6 @@ void draw3DScene( void )
 		pie_SetFogStatus(true);
 	}
 
-	GL_DEBUG("Draw 3D scene - text");
 	if (!bRender3DOnly)
 	{
 		/* Ensure that any text messages are displayed at bottom of screen */
@@ -745,14 +748,20 @@ void draw3DScene( void )
 	}
 	if (errorWaiting)
 	{
-		if (lastErrorTime + (60 * GAME_TICKS_PER_SEC) < realTime)
+		// print the error message if none have been printed for one minute
+		if (lastErrorTime == 0 || lastErrorTime + (60 * GAME_TICKS_PER_SEC) < realTime)
 		{
 			char trimMsg[255];
 			audio_PlayTrack(ID_SOUND_BUILD_FAIL);
-			ssprintf(trimMsg, "Error! (Check your logs!): %.78s", errorMessage);
+			ssprintf(trimMsg, "Error! (Check your logs!): %.78s", errorWaiting);
 			addConsoleMessage(trimMsg, DEFAULT_JUSTIFY, NOTIFY_MESSAGE);
-			errorWaiting = false;
+			errorWaiting = NULL;
+			lastErrorTime = realTime;
 		}
+	}
+	else
+	{
+		errorWaiting = debugLastError();
 	}
 	if (showSAMPLES)		//Displays the number of sound samples we currently have
 	{
@@ -794,15 +803,11 @@ void draw3DScene( void )
 	if (getWidgetsStatus() && !gamePaused())
 	{
 		char buildInfo[255];
-		if (showLevelName)
-		{
-			iV_SetFont(font_small);
-			iV_SetTextColour(WZCOL_TEXT_MEDIUM);
-			iV_DrawText( getLevelName(), RET_X + 134, 410 + E_H );
-		}
+		iV_SetFont(font_small);
+		iV_SetTextColour(WZCOL_TEXT_MEDIUM);
+		iV_DrawText(getLevelName(), RET_X + 134, 410 + E_H);
 		getAsciiTime(buildInfo, graphicsTime);
-		iV_DrawText( buildInfo, RET_X + 134, 422 + E_H );
-
+		iV_DrawText(buildInfo, RET_X + 134, 422 + E_H);
 		if (getDebugMappingStatus())
 		{
 			iV_DrawText( "DEBUG ", RET_X + 134, 436 + E_H );
@@ -856,29 +861,9 @@ void draw3DScene( void )
 		showDroidPaths();
 	}
 
-	GL_DEBUG("Draw 3D scene - end");
+	wzPerfEnd(PERF_MISC);
 }
 
-
-/// Draws the 3D textured terrain
-static void displayTerrain(void)
-{
-	pie_PerspectiveBegin();
-
-	/* Now, draw the terrain */
-	drawTiles(&player);
-
-	pie_PerspectiveEnd();
-
-	/* Show the drag Box if necessary */
-	drawDragBox();
-
-	/* Have we released the drag box? */
-	if(dragBox3D.status == DRAG_RELEASED)
-	{
-		dragBox3D.status = DRAG_INACTIVE;
-	}
-}
 
 /***************************************************************************/
 bool	doWeDrawProximitys( void )
@@ -939,7 +924,8 @@ static void drawTiles(iView *player)
 	int idx, jdx;
 	Vector3f theSun;
 
-	GL_DEBUG("Draw 3D scene - drawTiles");
+	// draw terrain
+	pie_PerspectiveBegin();
 
 	/* ---------------------------------------------------------------- */
 	/* Do boundary and extent checking                                  */
@@ -1015,15 +1001,17 @@ static void drawTiles(iView *player)
 			tileScreenInfo[idx][jdx].y = screen.y;
 		}
 	}
+	wzPerfEnd(PERF_START_FRAME);
 
 	/* This is done here as effects can light the terrain - pause mode problems though */
+	wzPerfBegin(PERF_EFFECTS, "3D scene - effects");
 	processEffects();
 	atmosUpdateSystem();
 	avUpdateTiles();
+	wzPerfEnd(PERF_EFFECTS);
 
 	// now we are about to draw the terrain
-	GL_DEBUG("Draw 3D scene - terrain");
-	pie_SetAlphaTest(false);
+	wzPerfBegin(PERF_TERRAIN, "3D scene - terrain");
 	pie_SetFogStatus(true);
 
 	pie_MatBegin();
@@ -1035,14 +1023,16 @@ static void drawTiles(iView *player)
 
 	// and to the warzone modelview transform
 	pie_MatEnd();
+	wzPerfEnd(PERF_TERRAIN);
 
 	// draw skybox
+	wzPerfBegin(PERF_SKYBOX, "3D scene - skybox");
 	renderSurroundings();
+	wzPerfEnd(PERF_SKYBOX);
 
 	// and prepare for rendering the models
-	GL_DEBUG("Draw 3D scene - models");
+	wzPerfBegin(PERF_MODEL_INIT, "Draw 3D scene - model init");
 	pie_SetRendMode(REND_OPAQUE);
-	pie_SetAlphaTest(true);
 
 	/* ---------------------------------------------------------------- */
 	/* Now display all the static objects                               */
@@ -1058,12 +1048,14 @@ static void drawTiles(iView *player)
 	displayDelivPoints();
 	display3DProjectiles(); // may be bucket render implemented
 	pie_MatEnd();
+	wzPerfEnd(PERF_MODEL_INIT);
 
-	GL_DEBUG("Draw 3D scene - particles");
+	wzPerfBegin(PERF_PARTICLES, "3D scene - particles");
 	atmosDrawParticles();
+	wzPerfEnd(PERF_PARTICLES);
 
+	wzPerfBegin(PERF_WATER, "3D scene - water");
 	// prepare for the water and the lightmap
-	pie_SetAlphaTest(false);
 	pie_SetFogStatus(true);
 
 	pie_MatBegin();
@@ -1074,11 +1066,12 @@ static void drawTiles(iView *player)
 
 	// and to the warzone modelview transform
 	pie_MatEnd();
+	wzPerfEnd(PERF_WATER);
 
-	GL_DEBUG("Draw 3D scene - bucket render");
+	wzPerfBegin(PERF_MODELS, "3D scene - models");
 	bucketRenderCurrentList();
 
-	GL_DEBUG("Draw 3D scene - blue prints");
+	GL_DEBUG("Draw 3D scene - blueprints");
 	displayBlueprints();
 
 	pie_RemainingPasses(); // draws shadows and transparent shapes
@@ -1092,7 +1085,9 @@ static void drawTiles(iView *player)
 	pie_MatEnd();
 	locateMouse();
 
-	GL_DEBUG("Draw 3D scene - end of tiles");
+	pie_PerspectiveEnd();
+
+	wzPerfEnd(PERF_MODELS);
 }
 
 /// Initialise the fog, skybox and some other stuff
@@ -1458,7 +1453,7 @@ void	renderAnimComponent( const COMPONENT_OBJECT *psObj )
 }
 
 /// Draw the buildings
-void displayStaticObjects( void )
+static void displayStaticObjects()
 {
 	ANIM_OBJECT	*psAnimObj;
 
@@ -1706,7 +1701,7 @@ void displayBlueprints(void)
 }
 
 /// Draw Factory Delivery Points
-void displayDelivPoints(void)
+static void displayDelivPoints()
 {
 	for (FLAG_POSITION *psDelivPoint = apsFlagPosLists[selectedPlayer]; psDelivPoint != NULL; psDelivPoint = psDelivPoint->psNext)
 	{
@@ -1718,7 +1713,7 @@ void displayDelivPoints(void)
 }
 
 /// Draw the features
-void displayFeatures( void )
+static void displayFeatures()
 {
 	// player can only be 0 for the features.
 	for (unsigned player = 0; player <= 1; ++player)
@@ -1740,15 +1735,14 @@ void displayFeatures( void )
 }
 
 /// Draw the Proximity messages for the *SELECTED PLAYER ONLY*
-void displayProximityMsgs( void )
+static void displayProximityMsgs()
 {
 	PROXIMITY_DISPLAY	*psProxDisp;
 	VIEW_PROXIMITY		*pViewProximity;
 	UDWORD				x, y;
 
 	/* Go through all the proximity Displays*/
-	for (psProxDisp = apsProxDisp[selectedPlayer]; psProxDisp != NULL;
-		psProxDisp = psProxDisp->psNext)
+	for (psProxDisp = apsProxDisp[selectedPlayer]; psProxDisp != NULL; psProxDisp = psProxDisp->psNext)
 	{
 		if(!(psProxDisp->psMessage->read))
 		{
@@ -1820,7 +1814,7 @@ static void displayAnimation( ANIM_OBJECT * psAnimObj, bool bHoldOnFirstFrame )
 }
 
 /// Draw the droids
-void displayDynamicObjects( void )
+static void displayDynamicObjects()
 {
 	ANIM_OBJECT	*psAnimObj;
 
@@ -1848,7 +1842,7 @@ void displayDynamicObjects( void )
 						// In this case, AFAICT only DROID_CYBORG_SUPER had the issue.  (Same issue as oil pump anim)
 						if (psDroid->droidType != DROID_CYBORG_SUPER)
 						{
-							renderDroid(psDroid);
+							displayComponentObject(psDroid);
 						}
 						else
 						{
@@ -1891,19 +1885,10 @@ Vector2i getPlayerPos()
 /// Set the player position
 void setPlayerPos(SDWORD x, SDWORD y)
 {
-	ASSERT( (x >= 0) && (x < world_coord(mapWidth)) &&
-			(y >= 0) && (y < world_coord(mapHeight)),
-		"setPlayerPos: position off map" );
-
+	ASSERT(x >= 0 && x < world_coord(mapWidth) && y >= 0 && y < world_coord(mapHeight), "Position off map");
 	player.p.x = x;
 	player.p.z = y;
 	player.r.z = 0;
-}
-
-/// Set the angle at which the player views the world
-void	setViewAngle(SDWORD angle)
-{
-	player.r.x = DEG(360 + angle);
 }
 
 /// Get the distance at which the player views the world
@@ -1922,10 +1907,10 @@ void setViewDistance(float dist)
 void	renderFeature(FEATURE *psFeature)
 {
 	SDWORD		rotation;
-	PIELIGHT	brightness;
+	PIELIGHT	brightness = pal_SetBrightness(200);
 	Vector3i dv;
-	bool bForceDraw = ( getRevealStatus() && psFeature->psStats->visibleAtStart);
-	int shadowFlags = 0;
+	bool bForceDraw = (getRevealStatus() && psFeature->psStats->visibleAtStart);
+	int pieFlags = 0;
 
 	if (!psFeature->visible[selectedPlayer] && !bForceDraw)
 	{
@@ -1935,7 +1920,7 @@ void	renderFeature(FEATURE *psFeature)
 	/* Mark it as having been drawn */
 	psFeature->sDisplay.frameNumber = currentGameFrame;
 
-	/* Daft hack to get around the oild derrick issue */
+	/* Daft hack to get around the oil derrick issue */
 	if (!TileHasFeature(mapTile(map_coord(removeZ(psFeature->pos)))))
 	{
 		return;
@@ -1958,18 +1943,12 @@ void	renderFeature(FEATURE *psFeature)
 
 	pie_MatRotY(-rotation);
 
-	brightness = pal_SetBrightness(200); //? HUH?
-
 	if (psFeature->psStats->subType == FEAT_SKYSCRAPER)
 	{
 		objectShimmy((BASE_OBJECT*)psFeature);
 	}
 
-	if (bForceDraw)
-	{
-		brightness = pal_SetBrightness(200);
-	}
-	else if (!getRevealStatus())
+	if (!getRevealStatus())
 	{
 		brightness = pal_SetBrightness(avGetObjLightLevel((BASE_OBJECT*)psFeature, brightness.byte.r));
 	}
@@ -1985,17 +1964,16 @@ void	renderFeature(FEATURE *psFeature)
 		|| psFeature->psStats->subType == FEAT_OIL_DRUM)
 	{
 		/* these cast a shadow */
-		shadowFlags = pie_STATIC_SHADOW;
+		pieFlags = pie_STATIC_SHADOW;
 	}
 
-	pie_Draw3DShape(psFeature->sDisplay.imd, 0, 0, brightness, shadowFlags, 0);
+	pie_Draw3DShape(psFeature->sDisplay.imd, 0, 0, brightness, pieFlags, 0);
 
 	setScreenDisp(&psFeature->sDisplay);
 
 	pie_MatEnd();
 }
 
-/// 
 void renderProximityMsg(PROXIMITY_DISPLAY *psProxDisp)
 {
 	UDWORD			msgX = 0, msgY = 0;
@@ -2383,41 +2361,9 @@ void	renderStructure(STRUCTURE *psStructure)
 								}
 							}
 						}
-						// we have a weapon so we draw a muzzle flash
-						if( weaponImd[i]->nconnectors && flashImd[i] && psStructure->pStructureType->type != REF_REPAIR_FACILITY)
+						else // we have a weapon so we draw a muzzle flash
 						{
-							unsigned int connector_num = 0;
-
-							// which barrel is firing if model have multiple muzzle connectors?
-							if (psStructure->asWeaps[i].shotsFired && (weaponImd[i]->nconnectors > 1))
-							{
-								// shoot first, draw later - substract one shot to get correct results
-								connector_num = (psStructure->asWeaps[i].shotsFired - 1) % (weaponImd[i]->nconnectors);
-							}
-
-							/* Now we need to move to the end of the firing barrel */
-							pie_TRANSLATE(weaponImd[i]->connectors[connector_num].x,
-											weaponImd[i]->connectors[connector_num].z,
-											weaponImd[i]->connectors[connector_num].y);
-
-							// assume no clan colours for muzzle effects
-							if (flashImd[i]->numFrames == 0 || flashImd[i]->animInterval <= 0)
-							{
-								// no anim so display one frame for a fixed time
-								if (graphicsTime >= psStructure->asWeaps[i].lastFired && graphicsTime < psStructure->asWeaps[i].lastFired + BASE_MUZZLE_FLASH_DURATION)
-								{
-									pie_Draw3DShape(flashImd[i], 0, colour, buildingBrightness, pieFlag | pie_ADDITIVE, EFFECT_MUZZLE_ADDITIVE);
-								}
-							}
-							else if (graphicsTime >= psStructure->asWeaps[i].lastFired)
-							{
-								// animated muzzle
-								frame = (graphicsTime - psStructure->asWeaps[i].lastFired)/flashImd[i]->animInterval;
-								if (frame < flashImd[i]->numFrames)
-								{
-									pie_Draw3DShape(flashImd[i], frame, colour, buildingBrightness, pieFlag | pie_ADDITIVE, EFFECT_MUZZLE_ADDITIVE);
-								}
-							}
+							drawMuzzleFlash(psStructure->asWeaps[i], weaponImd[i], flashImd[i], buildingBrightness, pieFlag, pieFlagData, colour);
 						}
 					}
 					pie_MatEnd();
@@ -2632,7 +2578,7 @@ void renderShadow( DROID *psDroid, iIMDShape *psShadowIMD )
 	Vector3i dv;
 
 	dv.x = psDroid->pos.x - player.p.x;
-	if(psDroid->droidType == DROID_TRANSPORTER || psDroid->droidType == DROID_SUPERTRANSPORTER)
+	if (isTransporter(psDroid))
 	{
 		dv.x -= bobTransporterHeight()/2;
 	}
@@ -2651,12 +2597,6 @@ void renderShadow( DROID *psDroid, iIMDShape *psShadowIMD )
 	pie_Draw3DShape(psShadowIMD, 0, 0, WZCOL_WHITE, pie_TRANSLUCENT, 128);
 
 	pie_MatEnd();
-}
-
-/// Draw all pieces of a droid and register it as a target
-void renderDroid( DROID *psDroid )
-{
-	displayComponentObject(psDroid);
 }
 
 /// Draws the strobing 3D drag box that is used for multiple selection
@@ -3433,7 +3373,7 @@ void calcScreenCoords(DROID *psDroid)
 		{
 			//don't allow Transporter Droids to be selected here
 			//unless we're in multiPlayer mode!!!!
-			if ((psDroid->droidType != DROID_TRANSPORTER && psDroid->droidType != DROID_SUPERTRANSPORTER) || bMultiPlayer)
+			if (!isTransporter(psDroid) || bMultiPlayer)
 			{
 				dealWithDroidSelect(psDroid, true);
 			}

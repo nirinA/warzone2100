@@ -119,8 +119,8 @@ static bool objmemDestroy(BASE_OBJECT *psObj)
 		default:
 			ASSERT(!"unknown object type", "objmemDestroy: unknown object type in destroyed list at 0x%p", psObj);
 	}
-	delete psObj;
 	debug(LOG_MEMORY, "BASE_OBJECT* 0x%p is freed.", psObj);
+	delete psObj;
 	return true;
 }
 
@@ -782,7 +782,7 @@ BASE_OBJECT *getBaseObjFromData(unsigned id, unsigned player, OBJECT_TYPE type)
 				return psObj;
 			}
 			// if transporter check any droids in the grp
-			if ((psObj->type == OBJ_DROID) && ((((DROID*)psObj)->droidType == DROID_TRANSPORTER || ((DROID*)psObj)->droidType == DROID_SUPERTRANSPORTER)))
+			if ((psObj->type == OBJ_DROID) && isTransporter((DROID*)psObj))
 			{
 				for(psTrans = ((DROID*)psObj)->psGroup->psList; psTrans != NULL; psTrans = psTrans->psGrpNext)
 				{
@@ -868,7 +868,7 @@ BASE_OBJECT *getBaseObjFromId(UDWORD id)
 					return psObj;
 				}
 				// if transporter check any droids in the grp
-				if ((psObj->type == OBJ_DROID) && ((((DROID*)psObj)->droidType == DROID_TRANSPORTER || ((DROID*)psObj)->droidType == DROID_SUPERTRANSPORTER)))
+				if ((psObj->type == OBJ_DROID) && isTransporter((DROID*)psObj))
 				{
 					for(psTrans = ((DROID*)psObj)->psGroup->psList; psTrans != NULL; psTrans = psTrans->psGrpNext)
 					{
@@ -993,7 +993,7 @@ void objCount(int *droids, int *structures, int *features)
 		for (DROID *psDroid = apsDroidLists[i]; psDroid; psDroid = psDroid->psNext)
 		{
 			(*droids)++;
-			if (psDroid->droidType == DROID_TRANSPORTER || psDroid->droidType == DROID_SUPERTRANSPORTER)
+			if (isTransporter(psDroid))
 			{
 				DROID *psTrans = psDroid->psGroup->psList;
 

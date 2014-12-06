@@ -98,6 +98,7 @@ struct iIMDShape
 	int texpage;
 	int tcmaskpage;
 	int normalpage;
+	int specularpage;
 	int sradius, radius;
 	Vector3i min, max;
 
@@ -110,8 +111,6 @@ struct iIMDShape
 
 	unsigned int nShadowEdges;
 	EDGE *shadowEdgeList;
-	float material[LIGHT_MAX][4];
-	float shininess;
 
 	// The old rendering data
 	unsigned int npoints;
@@ -121,6 +120,7 @@ struct iIMDShape
 
 	// The new rendering data
 	GLuint buffers[VBO_COUNT];
+	GLuint shaderProgram; // if using specialized shader for this model
 
 	iIMDShape *next;  // next pie in multilevel pies (NULL for non multilevel !)
 };
@@ -141,6 +141,9 @@ struct ImageDef
 	unsigned int Height;    /**< Height of image */
 	int XOffset;            /**< X offset into source position */
 	int YOffset;            /**< Y offset into source position */
+
+	int textureId;		///< duplicate of below, fix later
+	GLfloat invTextureSize;
 };
 
 struct Image;

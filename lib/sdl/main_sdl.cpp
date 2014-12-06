@@ -22,14 +22,24 @@
  * SDL backend code
  */
 
-#include <QtGui/QApplication>
+// Get platform defines before checking for them!
 #include "lib/framework/wzapp.h"
+
+// Needed for cross compiler static builds
+#if defined(WZ_CC_MINGW) && !defined(QT_STATICPLUGIN)
+#error "We only support static builds at this time!"
+#endif
+
+#include <QtWidgets/QApplication>
+// This is for the cross-compiler, for static QT 5 builds to avoid the 'plugins' crap on windows
+#if defined(QT_STATICPLUGIN)
+#include <QtCore/QtPlugin>
+#endif
 #include "lib/framework/input.h"
 #include "lib/framework/utf.h"
 #include "lib/framework/opengl.h"
 #include "lib/ivis_opengl/pieclip.h"
 #include "lib/gamelib/gtime.h"
-#include "src/warzoneconfig.h"
 #include <SDL.h>
 #include <QtCore/QSize>
 #include <QtCore/QString>
@@ -37,6 +47,11 @@
 #include "wz2100icon.h"
 #include "cursors_sdl.h"
 #include <algorithm>
+
+// This is for the cross-compiler, for static QT 5 builds to avoid the 'plugins' crap on windows
+#if defined(QT_STATICPLUGIN)
+Q_IMPORT_PLUGIN(QWindowsIntegrationPlugin)
+#endif
 
 extern void mainLoop();
 // used in crash reports & version info
@@ -48,8 +63,8 @@ int main(int argc, char *argv[])
 	return realmain(argc, argv);
 }
 
-unsigned                screenWidth = 0;   // Declared in frameint.h.
-unsigned                screenHeight = 0;  // Declared in frameint.h.
+unsigned                screenWidth = 0;   // Declared in screen.h
+unsigned                screenHeight = 0;  // Declared in screen.h
 static unsigned         screenDepth = 0;
 static SDL_Surface *    screen = NULL;
 
@@ -338,8 +353,12 @@ void wzScreenFlip()
 
 void wzToggleFullscreen()
 {
-	war_setFullscreen(!war_getFullscreen());
 	SDL_WM_ToggleFullScreen(screen);
+}
+
+bool wzIsFullscreen()
+{
+	return screen->flags & SDL_FULLSCREEN;
 }
 
 void wzQuit()
@@ -358,6 +377,11 @@ void wzGrabMouse()
 void wzReleaseMouse()
 {
 	SDL_WM_GrabInput(SDL_GRAB_OFF);
+}
+
+void wzDelay(unsigned int delay)
+{
+	SDL_Delay(delay);
 }
 
 /**************************/
@@ -868,25 +892,6 @@ bool mouseDrag(MOUSE_KEY_CODE code, UDWORD *px, UDWORD *py)
 	return false;
 }
 
-// TODO: Rewrite this silly thing
-void setMousePos(uint16_t x, uint16_t y)
-{
-	static int mousewarp = -1;
-
-	if (mousewarp == -1)
-	{
-		int val;
-
-		mousewarp = 1;
-		if ((val = getMouseWarp()))
-		{
-			mousewarp = !val;
-		}
-	}
-	if (mousewarp)
-		SDL_WarpMouse(x, y);
-}
-
 /*!
  * Handle keyboard events
  */
@@ -1089,7 +1094,7 @@ void wzMain(int &argc, char **argv)
 	appPtr = new QApplication(argc, argv);  // For Qt-script.
 }
 
-bool wzMain2()
+bool wzMain2(int antialiasing, bool fullscreen, bool vsync)
 {
 	//BEGIN **** Was in old frameInitialise. ****
 
@@ -1126,9 +1131,6 @@ bool wzMain2()
 	unsigned        width = pie_GetVideoBufferWidth();
 	unsigned        height = pie_GetVideoBufferHeight();
 	unsigned        bitDepth = pie_GetVideoBufferDepth();
-	unsigned        fsaa = war_getFSAA();
-	bool            fullScreen = war_getFullscreen();
-	bool            vsync = war_GetVsync();
 
 	// Fetch the video info.
 	const SDL_VideoInfo* video_info = SDL_GetVideoInfo();
@@ -1158,7 +1160,7 @@ bool wzMain2()
 	int video_flags  = SDL_OPENGL;    // Enable OpenGL in SDL.
 	video_flags |= SDL_ANYFORMAT; // Don't emulate requested BPP if not available.
 
-	if (fullScreen)
+	if (fullscreen)
 	{
 		video_flags |= SDL_FULLSCREEN;
 	}
@@ -1170,10 +1172,10 @@ bool wzMain2()
 	SDL_GL_SetAttribute(SDL_GL_SWAP_CONTROL, vsync);
 
 	// Enable FSAA anti-aliasing if and at the level requested by the user
-	if (fsaa)
+	if (antialiasing)
 	{
 		SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
-		SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, fsaa);
+		SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, antialiasing);
 	}
 
 	int bpp = SDL_VideoModeOK(width, height, bitDepth, video_flags);
@@ -1239,9 +1241,6 @@ bool wzMain2()
 	glLoadIdentity();
 	glCullFace(GL_FRONT);
 	glEnable(GL_CULL_FACE);
-
-	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-	//END **** Was in old screenInitialise. ****
 
 	init_scrap();
 	return true;

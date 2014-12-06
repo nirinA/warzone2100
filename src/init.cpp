@@ -38,7 +38,6 @@
 #include "lib/ivis_opengl/screen.h"
 #include "lib/ivis_opengl/pieblitfunc.h"
 #include "lib/ivis_opengl/tex.h"
-#include "lib/ivis_opengl/ivi.h"
 #include "lib/netplay/netplay.h"
 #include "lib/script/script.h"
 #include "lib/sound/audio_id.h"
@@ -99,7 +98,7 @@
 #include "qtscript.h"
 #include "template.h"
 
-static void	initMiscVars(void);
+static void initMiscVars();
 
 static const char UserMusicPath[] = "music";
 
@@ -472,32 +471,38 @@ static MapFileList listMapFiles()
 	for (MapFileList::iterator realFileName = ret.begin(); realFileName != ret.end(); ++realFileName)
 	{
 		std::string realFilePathAndName = PHYSFS_getWriteDir() + *realFileName;
-		PHYSFS_addToSearchPath(realFilePathAndName.c_str(), PHYSFS_APPEND);
-		int unsafe = 0;
-		char **filelist = PHYSFS_enumerateFiles("multiplay/maps");
-
-		for (char **file = filelist; *file != NULL; ++file)
+		if (PHYSFS_addToSearchPath(realFilePathAndName.c_str(), PHYSFS_APPEND))
 		{
-			std::string isDir = std::string("multiplay/maps/") + *file;
-			if (PHYSFS_isDirectory(isDir.c_str()))
-				continue;
-			std::string checkfile = *file;
-			debug(LOG_WZ,"checking ... %s", *file);
-			if (checkfile.substr(checkfile.find_last_of(".")+ 1) == "gam")
+			int unsafe = 0;
+			char **filelist = PHYSFS_enumerateFiles("multiplay/maps");
+
+			for (char **file = filelist; *file != NULL; ++file)
 			{
-				if (unsafe++ > 1)
+				std::string isDir = std::string("multiplay/maps/") + *file;
+				if (PHYSFS_isDirectory(isDir.c_str()))
+					continue;
+				std::string checkfile = *file;
+				debug(LOG_WZ,"checking ... %s", *file);
+				if (checkfile.substr(checkfile.find_last_of(".")+ 1) == "gam")
 				{
-					debug(LOG_ERROR, "Map packs are not supported! %s NOT added.", realFilePathAndName.c_str());
-					break;
+					if (unsafe++ > 1)
+					{
+						debug(LOG_ERROR, "Map packs are not supported! %s NOT added.", realFilePathAndName.c_str());
+						break;
+					}
 				}
 			}
+			PHYSFS_freeList(filelist);
+			if (unsafe < 2)
+			{
+				filtered.push_back(realFileName->c_str());
+			}
+			PHYSFS_removeFromSearchPath(realFilePathAndName.c_str());
 		}
-		PHYSFS_freeList(filelist);
-		if (unsafe < 2)
+		else
 		{
-			filtered.push_back(realFileName->c_str());
+			debug(LOG_POPUP, "Could not mount %s, because: %s.\nPlease delete or move the file specified.", realFilePathAndName.c_str(), PHYSFS_getLastError());
 		}
-		PHYSFS_removeFromSearchPath(realFilePathAndName.c_str());
 	}
 
 	// restore our search path(s) again
@@ -511,6 +516,80 @@ static MapFileList listMapFiles()
 	return filtered;
 }
 
+// Map processing
+struct WZmaps
+{
+	std::string MapName;
+	bool isMapMod;
+};
+
+std::vector<struct WZmaps> WZ_Maps;
+
+struct FindMap
+{
+	const std::string map;
+	FindMap(const std::string& name) : map(name) {};
+	bool operator()(const WZmaps& wzm) const { return wzm.MapName == map; };
+};
+
+bool CheckForMod(char *theMap)
+{
+	std::vector<struct WZmaps>::iterator it;
+	if (theMap == NULL)
+	{
+		return false;
+	}
+	it = std::find_if(WZ_Maps.begin(), WZ_Maps.end(), FindMap(theMap));
+	if(it != WZ_Maps.end())
+	{
+		return it->isMapMod;
+	}
+	debug(LOG_ERROR, "Couldn't find map %s", theMap);
+
+	return false;
+}
+
+// Mount the archive under the mountpoint, and enumerate the archive according to lookin
+static bool CheckInMap(const char *archive, const char *mountpoint,const char *lookin)
+{
+	bool mapmod = false;
+
+	if (!PHYSFS_mount(archive, mountpoint, PHYSFS_APPEND))
+	{
+		// We already checked to see if this was valid before, and now, something went seriously wrong.
+		debug(LOG_FATAL, "Could not mount %s, because: %s. Please delete the file, and run the game again. Game will now exit.", archive, PHYSFS_getLastError());
+		exit(-1);
+	}
+
+	std::string checkpath = lookin;
+	checkpath.append("/");
+	char **filelist = PHYSFS_enumerateFiles(lookin);
+	for (char **file = filelist; *file != NULL; ++file)
+	{
+		std::string checkfile = *file;
+		if (PHYSFS_isDirectory((checkpath+checkfile).c_str()))
+		{
+			if (checkfile.compare("wrf")==0 || checkfile.compare("stats")==0 ||checkfile.compare("components")==0
+				|| checkfile.compare("anims")==0 || checkfile.compare("effects")==0 ||checkfile.compare("messages")==0
+				|| checkfile.compare("audio")==0 || checkfile.compare("sequenceaudio")==0 ||checkfile.compare("misc")==0
+				|| checkfile.compare("features")==0 || checkfile.compare("script")==0 ||checkfile.compare("structs")==0
+				|| checkfile.compare("tileset")==0 || checkfile.compare("images")==0 || checkfile.compare("texpages")==0
+				|| checkfile.compare("skirmish")==0 )
+			{
+				debug(LOG_WZ, "Detected: %s %s" , archive, checkfile.c_str());
+				mapmod = true;
+				break;
+			}
+		}
+	}
+	PHYSFS_freeList(filelist);
+
+	if (!PHYSFS_removeFromSearchPath(archive))
+	{
+		debug(LOG_ERROR, "Could not unmount %s, %s", archive, PHYSFS_getLastError());
+	}
+	return mapmod;
+}
 
 bool buildMapList()
 {
@@ -519,16 +598,20 @@ bool buildMapList()
 		return false;
 	}
 	loadLevFile("addon.lev", mod_multiplay, false, NULL);
-
+	WZ_Maps.clear();
 	MapFileList realFileNames = listMapFiles();
 	for (MapFileList::iterator realFileName = realFileNames.begin(); realFileName != realFileNames.end(); ++realFileName)
 	{
+		bool mapmod = false;
+		struct WZmaps CurrentMap;
 		std::string realFilePathAndName = PHYSFS_getRealDir(realFileName->c_str()) + *realFileName;
+
 		PHYSFS_addToSearchPath(realFilePathAndName.c_str(), PHYSFS_APPEND);
 
 		char **filelist = PHYSFS_enumerateFiles("");
 		for (char **file = filelist; *file != NULL; ++file)
 		{
+			std::string checkfile = *file;
 			size_t len = strlen(*file);
 			if (len > 10 && !strcasecmp(*file + (len - 10), ".addon.lev"))  // Do not add addon.lev again
 			{
@@ -539,11 +622,23 @@ bool buildMapList()
 			{
 				loadLevFile(*file, mod_multiplay, true, realFileName->c_str());
 			}
-
 		}
 		PHYSFS_freeList(filelist);
 
-		PHYSFS_removeFromSearchPath(realFilePathAndName.c_str());
+		if (PHYSFS_removeFromSearchPath(realFilePathAndName.c_str()) == 0)
+		{
+			debug(LOG_ERROR, "Could not unmount %s, %s", realFilePathAndName.c_str(), PHYSFS_getLastError());
+		}
+
+		 mapmod = CheckInMap(realFilePathAndName.c_str(), "WZMap", "WZMap");
+		 if (!mapmod)
+		 {
+			mapmod = CheckInMap(realFilePathAndName.c_str(), "WZMap", "WZMap/multiplay");
+		 }
+
+		CurrentMap.MapName = realFileName->c_str();
+		CurrentMap.isMapMod = mapmod;
+		WZ_Maps.push_back(CurrentMap);
 	}
 
 	return true;
@@ -593,15 +688,10 @@ bool systemInitialise(void)
 	}
 
 	// Initialize the iVis text rendering module
+	wzSceneBegin("Main menu loop");
 	iV_TextInit();
 
-	// Fix badly named OpenGL functions. Must be done after iV_TextInit, to avoid the renames being clobbered by an extra glewInit() call.
-	screen_EnableMissingFunctions();
-
 	pie_InitRadar();
-	iV_Reset();								// Reset the IV library.
-
-	readAIs();
 
 	return true;
 }
@@ -621,6 +711,7 @@ void systemShutdown(void)
 	}
 
 	shutdownEffectsSystem();
+	wzSceneEnd("Main menu loop");
 	keyClearMappings();
 
 	// free up all the load functions (all the data should already have been freed)
@@ -644,7 +735,6 @@ void systemShutdown(void)
 	}
 
 	debug(LOG_MAIN, "shutting down graphics subsystem");
-	iV_ShutDown();
 	levShutDown();
 	widgShutDown();
 	fpathShutdown();
@@ -652,6 +742,7 @@ void systemShutdown(void)
 	debug(LOG_MAIN, "shutting down everything else");
 	pal_ShutDown();		// currently unused stub
 	frameShutDown();	// close screen / SDL / resources / cursors / trig
+	screenShutDown();
 	closeConfig();		// "registry" close
 	cleanSearchPath();	// clean PHYSFS search paths
 	debug_exit();		// cleanup debug routines
@@ -699,14 +790,14 @@ init_ObjectDead( void * psObj )
 
 bool frontendInitialise(const char *ResourceFile)
 {
-	debug(LOG_MAIN, "Initialising frontend : %s", ResourceFile);
+	debug(LOG_WZ, "== Initializing frontend == : %s", ResourceFile);
 
 	if(!InitialiseGlobals())				// Initialise all globals and statics everywhere.
 	{
 		return false;
 	}
 
-	iV_Reset();								// Reset the IV library.
+	readAIs();
 
 	if (!scrTabInitialise())				// Initialise the script system
 	{
@@ -815,6 +906,7 @@ bool frontendShutdown(void)
 	}
 
 	debug(LOG_TEXTURE, "=== frontendShutdown ===");
+	modelShutdown();
 	pie_TexShutDown();
 	pie_TexInit(); // ready for restart
 	freeComponentLists();
@@ -832,14 +924,14 @@ bool frontendShutdown(void)
 bool stageOneInitialise(void)
 {
 	debug(LOG_WZ, "== stageOneInitalise ==");
+	wzSceneEnd("Main menu loop");
+	wzSceneBegin("Main game loop");
 
 	// Initialise all globals and statics everwhere.
 	if(!InitialiseGlobals())
 	{
 		return false;
 	}
-
-	iV_Reset(); // Reset the IV library
 
 	if (!stringsInitialise())	/* Initialise the string system */
 	{
@@ -892,12 +984,6 @@ bool stageOneInitialise(void)
 		return false;
 	}
 
-	/* Initialise the movement system */
-	if (!moveInitialise())
-	{
-		return false;
-	}
-
 	if (!proj_InitSystem())
 	{
 		return false;
@@ -934,6 +1020,11 @@ bool stageOneShutDown(void)
 {
 	debug(LOG_WZ, "== stageOneShutDown ==");
 
+	atmosSetWeatherType(WT_NONE); // reset weather and free its data
+	wzPerfShutdown();
+
+	pie_FreeShaders();
+
 	if ( audio_Disabled() == false )
 	{
 		sound_CheckAllUnloaded();
@@ -941,7 +1032,7 @@ bool stageOneShutDown(void)
 
 	proj_Shutdown();
 
-    releaseMission();
+	releaseMission();
 
 	if (!aiShutdown())
 	{
@@ -981,6 +1072,7 @@ bool stageOneShutDown(void)
 	}
 
 	debug(LOG_TEXTURE, "=== stageOneShutDown ===");
+	modelShutdown();
 	pie_TexShutDown();
 
 	// Use mod_multiplay as the default (campaign might have set it to mod_singleplayer)
@@ -988,6 +1080,8 @@ bool stageOneShutDown(void)
 	pie_TexInit(); // restart it
 
 	initMiscVars();
+	wzSceneEnd("Main game loop");
+	wzSceneBegin("Main menu loop");
 
 	return true;
 }
@@ -1016,7 +1110,6 @@ bool stageTwoInitialise(void)
 
 	if(!initMiscImds())			/* Set up the explosions */
 	{
-		iV_ShutDown();
 		debug( LOG_FATAL, "Can't find all the explosions graphics?" );
 		abort();
 		return false;
@@ -1164,7 +1257,7 @@ bool stageThreeInitialise(void)
 	// Load any stored templates; these need to be available ASAP
 	initTemplates();
 
-	prepareScripts();
+	prepareScripts(getLevelLoadType() == GTYPE_SAVE_MIDMISSION || getLevelLoadType() == GTYPE_SAVE_START);
 
 	if (!fpathInitialise())
 	{
@@ -1215,9 +1308,10 @@ bool stageThreeInitialise(void)
 		}
 	}
 
-	// ffs JS   (and its a global!)
 	if (getLevelLoadType() != GTYPE_SAVE_MIDMISSION)
 	{
+		if (getDebugMappingStatus())
+			triggerEventCheatMode(true);
 		eventFireCallbackTrigger((TRIGGER_TYPE)CALL_GAMEINIT);
 		triggerEvent(TRIGGER_GAME_INIT);
 	}
@@ -1270,14 +1364,10 @@ bool stageThreeShutDown(void)
 		return false;
 	}
 
-	/*
-		When this line wasn't at this point. The PSX version always failed on the next script after the tutorial ... unexplained why?
-	*/
-//	bInTutorial=false;
 	scrExternReset();
 
-    //reset the run data so that doesn't need to be initialised in the scripts
-    initRunData();
+	// reset the run data so that doesn't need to be initialised in the scripts
+	initRunData();
 
 	resetVTOLLandingPos();
 
@@ -1324,14 +1414,13 @@ bool saveGameReset(void)
 		return false;
 	}
 
-    //clear out any messages
-    freeMessages();
+	freeMessages();
 
 	return true;
 }
 
 // --- Miscellaneous Initialisation stuff that really should be done each restart
-static void	initMiscVars(void)
+static void initMiscVars()
 {
 	selectedPlayer = 0;
 	realSelectedPlayer = 0;

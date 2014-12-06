@@ -78,7 +78,6 @@ static SDWORD bucketCalculateZ(RENDER_TYPE objectType, void* pObject)
 
 			position.x = position.x - player.p.x;
 			position.z = -(position.z - player.p.z);
- 			position.y = position.y;
 
 			/* 16 below is HACK!!! */
 			z = pie_RotateProject(&position,&pixel) - 16;
@@ -433,7 +432,7 @@ void bucketRenderCurrentList(void)
 				renderEffect((EFFECT*)thisTag->pObject);
 				break;
 			case RENDER_DROID:
-				renderDroid((DROID*)thisTag->pObject);
+				displayComponentObject((DROID*)thisTag->pObject);
 				break;
 			case RENDER_SHADOW:
 				renderShadow((DROID*)thisTag->pObject, getImdFromIndex(MI_SHADOW));

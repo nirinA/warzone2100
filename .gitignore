@@ -132,6 +132,8 @@ Makefile.in
 /po/remove-potcdate.sed
 /po/stamp-po
 /po/warzone2100.pot
+/compile
+/test-driver
 
 # Include this one Makefile
 !/pkg/dpkg/videos/Makefile
@@ -187,6 +189,7 @@ tools/qwzm/ui_connectorview.h
 tools/qwzm/ui_qwzm.h
 
 # Patches
+commit-*
 *.patch
 *.diff
 *.rej
@@ -250,11 +253,16 @@ macosx/configs/CS-ID.xcconfig
 *.user
 *.lib
 *.dll
+*.lastcodeanalysissucceeded
 data/*.dll
+data/qt.conf
+data/*config*/*
 data/config/*
 data/etc/*
+data/std*.txt
 data/fonts/
 devpkg/*
+[Dd]ebug/
 *.opensdf
 *.aps
 *.sdf

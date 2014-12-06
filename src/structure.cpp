@@ -92,6 +92,7 @@
 #include "gateway.h"
 
 #include "random.h"
+#include <functional>
 
 //Maximium slope of the terrin for building a structure
 #define MAX_INCLINE		50//80//40
@@ -440,17 +441,11 @@ bool loadStructureStats(QString filename)
 	QStringList list = ini.childGroups();
 	asStructureStats = new STRUCTURE_STATS[list.size()];
 	numStructureStats = list.size();
-	QHash<QString,int> checkIDdict;
 	for (int inc = 0; inc < list.size(); ++inc)
 	{
 		ini.beginGroup(list[inc]);
 		STRUCTURE_STATS *psStats = &asStructureStats[inc];
-		psStats->name = ini.value("name").toString();
-		psStats->id = list[inc];
-
-		// check that the name has not been used already
-		ASSERT_OR_RETURN(false, !checkIDdict.contains(getID(psStats)), "Structure ID '%s' used already", getID(psStats));
-		checkIDdict.insert(psStats->id, inc);
+		loadStats(ini, psStats, inc);
 
 		psStats->ref = REF_STRUCTURE_START + inc;
 
@@ -468,7 +463,7 @@ bool loadStructureStats(QString filename)
 		psStats->base.power = ini.value("powerPoints", 0).toInt();
 		psStats->base.rearm = ini.value("rearmPoints", 0).toInt();
 		psStats->base.resistance = ini.value("resistance", 0).toUInt();
-		psStats->base.hitpoints = ini.value("bodyPoints", 1).toUInt();
+		psStats->base.hitpoints = ini.value("hitpoints", 1).toUInt();
 		psStats->base.armour = ini.value("armour", 0).toUInt();
 		psStats->base.thermal = ini.value("thermal", 0).toUInt();
 		for (int i = 0; i < MAX_PLAYERS; i++)
@@ -479,7 +474,7 @@ bool loadStructureStats(QString filename)
 			psStats->upgrade[i].production = psStats->base.production;
 			psStats->upgrade[i].rearm = psStats->base.rearm;
 			psStats->upgrade[i].resistance = ini.value("resistance", 0).toUInt();
-			psStats->upgrade[i].hitpoints = ini.value("bodyPoints", 1).toUInt();
+			psStats->upgrade[i].hitpoints = ini.value("hitpoints", 1).toUInt();
 			psStats->upgrade[i].armour = ini.value("armour", 0).toUInt();
 			psStats->upgrade[i].thermal = ini.value("thermal", 0).toUInt();
 		}
@@ -500,12 +495,12 @@ bool loadStructureStats(QString filename)
 		psStats->strength = structStrength[strength];
 	
 		// set baseWidth
-		psStats->baseWidth = ini.value("baseWidth", 0).toUInt();
-		ASSERT_OR_RETURN(false, psStats->baseWidth <= 100, "Invalid baseWidth '%d' for structure '%s'", psStats->baseWidth, getID(psStats));
+		psStats->baseWidth = ini.value("width", 0).toUInt();
+		ASSERT_OR_RETURN(false, psStats->baseWidth <= 100, "Invalid width '%d' for structure '%s'", psStats->baseWidth, getID(psStats));
 		
 		// set baseBreadth
-		psStats->baseBreadth = ini.value("baseBreadth", 0).toUInt();
-		ASSERT_OR_RETURN(false, psStats->baseBreadth < 100, "Invalid baseBreadth '%d' for structure '%s'", psStats->baseBreadth, getID(psStats));
+		psStats->baseBreadth = ini.value("breadth", 0).toUInt();
+		ASSERT_OR_RETURN(false, psStats->baseBreadth < 100, "Invalid breadth '%d' for structure '%s'", psStats->baseBreadth, getID(psStats));
 		
 		psStats->height = ini.value("height").toUInt();
 		psStats->powerToBuild = ini.value("buildPower").toUInt();
@@ -515,7 +510,7 @@ bool loadStructureStats(QString filename)
 		QStringList models = ini.value("structureModel").toStringList();
 		for (int j = 0; j < models.size(); j++)
 		{
-			iIMDShape *imd = (iIMDShape *)resGetData("IMD", models[j].trimmed().toUtf8().constData());
+			iIMDShape *imd = modelGet(models[j].trimmed());
 			ASSERT(imd != NULL, "Cannot find the PIE structureModel '%s' for structure '%s'", models[j].toUtf8().constData(), getID(psStats));
 			psStats->pIMD.push_back(imd);
 		}
@@ -524,7 +519,7 @@ bool loadStructureStats(QString filename)
 		QString baseModel = ini.value("baseModel","").toString();
 		if (baseModel.compare("") != 0)
 		{
-			iIMDShape *imd = (iIMDShape *)resGetData("IMD", baseModel.toUtf8().constData());
+			iIMDShape *imd = modelGet(baseModel);
 			ASSERT(imd != NULL, "Cannot find the PIE baseModel '%s' for structure '%s'", baseModel.toUtf8().constData(), getID(psStats));
 			psStats->pBaseIMD = imd;
 		}
@@ -2140,28 +2135,24 @@ static bool structClearTile(UWORD x, UWORD y)
 	return true;
 }
 
-/*find a location near to a structure to start the droid of*/
+/* An auxiliary function for std::stable_sort in placeDroid */
+static bool comparePlacementPoints(Vector2i a, Vector2i b)
+{
+	return abs(a.x) + abs(a.y) < abs(b.x) + abs(b.y);
+}
+
+/* Find a location near to a structure to start the droid of */
 bool placeDroid(STRUCTURE *psStructure, UDWORD *droidX, UDWORD *droidY)
 {
-	SWORD			sx,sy, xmin,xmax, ymin,ymax, x,y, xmid;
-	bool			placed;
-	unsigned sWidth   = getStructureWidth(psStructure);
-	unsigned sBreadth = getStructureBreadth(psStructure);
 
 	CHECK_STRUCTURE(psStructure);
 
-	/* Get the tile coords for the top left of the structure */
-	sx = (SWORD)(psStructure->pos.x - sWidth * TILE_UNITS/2);
-	sx = map_coord(sx);
-	sy = (SWORD)(psStructure->pos.y - sBreadth * TILE_UNITS/2);
-	sy = map_coord(sy);
-
 	/* Find the four corners of the square */
-	xmin = (SWORD)(sx - 1);
-	xmax = (SWORD)(sx + sWidth);
-	xmid = (SWORD)(sx + (sWidth-1)/2);
-	ymin = (SWORD)(sy - 1);
-	ymax = (SWORD)(sy + sBreadth);
+	StructureBounds bounds = getStructureBounds(psStructure);
+	int xmin = bounds.map.x - 1;
+	int xmax = bounds.map.x + bounds.size.x;
+	int ymin = bounds.map.y - 1;
+	int ymax = bounds.map.y + bounds.size.y;
 	if (xmin < 0)
 	{
 		xmin = 0;
@@ -2179,73 +2170,86 @@ bool placeDroid(STRUCTURE *psStructure, UDWORD *droidX, UDWORD *droidY)
 		ymax = (SWORD)mapHeight;
 	}
 
-	/* Look for a clear location for the droid across the bottom */
-	/* start in the middle */
-	placed = false;
-	y = ymax;
-	/* middle to right */
-	for(x = xmid; x < xmax; x++)
+	/* Round direction to nearest 90°. */
+	uint16_t direction = (psStructure->rot.direction + 0x2000)&0xC000;
+
+	/* We sort all adjacent tiles by their Manhattan distance to the
+	target droid exit tile, misplaced by (1/3, 1/4) tiles.
+	Since only whole coordinates are sorted, this makes sure sorting
+	is deterministic. Target coordinates, multiplied by 12 to eliminate
+	floats, are stored in (sx, sy). */
+	int sx, sy;
+
+	if (direction == 0x0)
 	{
-		if (structClearTile(x, y))
-		{
-			placed = true;
-			break;
-		}
+		sx = 12 * (xmin + 1) + 4;
+		sy = 12 * ymax + 3;
 	}
-	/* left to middle */
-	if (!placed)
+	else if (direction == 0x4000)
 	{
-		for(x = xmin; x < xmid; x++)
-		{
-			if (structClearTile(x, y))
-			{
-				placed = true;
-				break;
-			}
-		}
+		sx = 12 * xmax + 3;
+		sy = 12 * (ymax - 1) - 4;
 	}
-	/* across the top */
-	if (!placed)
+	else if (direction == 0x8000)
 	{
-		y = ymin;
-		for(x = xmin; x < xmax; x++)
-		{
-			if (structClearTile(x, y))
-			{
-				placed = true;
-				break;
-			}
-		}
+		sx = 12 * (xmax - 1) - 4;
+		sy = 12 * ymin - 3;
 	}
-	/* the left */
-	if (!placed)
+	else
 	{
-		x = xmin;
-		for(y = ymin; y < ymax; y++)
+		sx = 12 * xmin - 3;
+		sy = 12 * (ymin + 1) + 4;
+	}
+
+	std::vector<Vector2i> tiles;
+	for (int x = xmin; x <= xmax; ++x)
+	{
+		for (int y = ymin; y <= ymax; ++y)
 		{
 			if (structClearTile(x, y))
 			{
-				placed = true;
-				break;
+				tiles.push_back(Vector2i(12 * x - sx, 12 * y - sy));
 			}
 		}
 	}
-	/* the right */
-	if (!placed)
+
+	if (tiles.size() == 0)
 	{
-		x = xmax;
-		for(y = ymin; y < ymax; y++)
-		{
-			if (structClearTile(x, y))
-			{
-				placed = true;
-				break;
-			}
-		}
+		return false;
 	}
-	*droidX = x;
-	*droidY = y;
-	return placed;
+
+	std::sort(tiles.begin(), tiles.end(), comparePlacementPoints);
+
+	/* Store best tile coordinates in (sx, sy),
+	which are also map coordinates of its north-west corner.
+	Store world coordinates of this tile's center in (wx, wy) */
+	sx = (tiles[0].x + sx) / 12;
+	sy = (tiles[0].y + sy) / 12;
+	int wx = world_coord(sx) + TILE_UNITS / 2;
+	int wy = world_coord(sy) + TILE_UNITS / 2;
+
+	/* Finally, find world coordinates of the structure point closest to (mx, my).
+	For simplicity, round to grid vertices. */
+	if (2 * sx <= xmin + xmax)
+	{
+		wx += TILE_UNITS / 2;
+	}
+	if (2 * sx >= xmin + xmax)
+	{
+		wx -= TILE_UNITS / 2;
+	}
+	if (2 * sy <= ymin + ymax)
+	{
+		wy += TILE_UNITS / 2;
+	}
+	if (2 * sy >= ymin + ymax)
+	{
+		wy -= TILE_UNITS / 2;
+	}
+
+	*droidX = wx;
+	*droidY = wy;
+	return true;
 }
 
 /* Place a newly manufactured droid next to a factory  and then send if off
@@ -2271,7 +2275,7 @@ static bool structPlaceDroid(STRUCTURE *psStructure, DROID_TEMPLATE *psTempl, DR
 		//create a droid near to the structure
 		syncDebug("Placing new droid at (%d,%d)", x, y);
 		turnOffMultiMsg(true);
-		psNewDroid = buildDroid(psTempl, world_coord(x), world_coord(y), psStructure->player, false, &initialOrders);
+		psNewDroid = buildDroid(psTempl, x, y, psStructure->player, false, &initialOrders);
 		turnOffMultiMsg(false);
 		if (!psNewDroid)
 		{
@@ -2349,8 +2353,7 @@ static bool structPlaceDroid(STRUCTURE *psStructure, DROID_TEMPLATE *psTempl, DR
 			assignCommander = true;
 		}
 
-		bool isTransporter = psNewDroid->droidType == DROID_TRANSPORTER || psNewDroid->droidType == DROID_SUPERTRANSPORTER;
-		if (isVtolDroid(psNewDroid) && !isTransporter)
+		if (isVtolDroid(psNewDroid) && !isTransporter(psNewDroid))
 		{
 			moveToRearm(psNewDroid);
 		}
@@ -2358,7 +2361,7 @@ static bool structPlaceDroid(STRUCTURE *psStructure, DROID_TEMPLATE *psTempl, DR
 		{
 			// TODO: Should synchronise .psCommander in all cases.
 			//syncDebug("Has commander.");
-			if (isTransporter)
+			if (isTransporter(psNewDroid))
 			{
 				// Transporters can't be assigned to commanders, due to abuse of .psGroup. Try to land on the commander instead. Hopefully the transport is heavy enough to crush the commander.
 				orderDroidLoc(psNewDroid, DORDER_MOVE, psFact->psCommander->pos.x, psFact->psCommander->pos.y, ModeQueue);
@@ -3256,7 +3259,7 @@ static void aiUpdateStructure(STRUCTURE *psStructure, bool isMission)
 				if (psDroid->body < psDroid->originalBody)
 				{
 					//if in multiPlayer, and a Transporter - make sure its on the ground before repairing
-					if (bMultiPlayer && (psDroid->droidType == DROID_TRANSPORTER || psDroid->droidType == DROID_SUPERTRANSPORTER))
+					if (bMultiPlayer && isTransporter(psDroid))
 					{
 						if (!(psDroid->sMove.Status == MOVEINACTIVE &&
 							psDroid->sMove.iVertSpeed == 0))
@@ -3684,8 +3687,7 @@ void structureUpdate(STRUCTURE *psBuilding, bool mission)
 		//if selfrepair has been researched then check the health level of the
 		//structure once resistance is fully up
 		iPointsRequired = structureBody(psBuilding);
-		if (selfRepairEnabled(psBuilding->player) && (psBuilding->body < (SWORD)
-			iPointsRequired))
+		if (selfRepairEnabled(psBuilding->player) && psBuilding->body < iPointsRequired && psBuilding->status != SS_BEING_BUILT)
 		{
 			//start the self repair off
 			if (psBuilding->lastResistance == ACTION_START_TIME)
@@ -4760,13 +4762,10 @@ bool destroyStruct(STRUCTURE *psDel, unsigned impactTime)
 return the first one it finds!! */
 int32_t getStructStatFromName(char const *pName)
 {
-	for (int inc = 0; inc < numStructureStats; inc++)
+	BASE_STATS *psStat = getCompStatsFromName(pName);
+	if (psStat)
 	{
-		STRUCTURE_STATS *psStat = &asStructureStats[inc];
-		if (psStat->id.compare(pName) == 0)
-		{
-			return inc;
-		}
+		return psStat->index;
 	}
 	return -1;
 }
@@ -5725,7 +5724,7 @@ bool electronicDamage(BASE_OBJECT *psTarget, UDWORD damage, UBYTE attackPlayer)
 		//in multiPlayer cannot attack a Transporter with EW
 		if (bMultiPlayer)
 		{
-			ASSERT_OR_RETURN(true, (psDroid->droidType != DROID_TRANSPORTER && psDroid->droidType != DROID_SUPERTRANSPORTER), "Cannot attack a Transporter in multiPlayer");
+			ASSERT_OR_RETURN(true, !isTransporter(psDroid), "Cannot attack a Transporter in multiPlayer");
 		}
 
 		if (psDroid->resistance == ACTION_START_TIME)
@@ -6740,13 +6739,13 @@ bool clearRearmPad(STRUCTURE *psStruct)
 // if bClear is true it tries to find the nearest clear rearm pad in
 // the same cluster as psTarget
 // psTarget can be NULL
-STRUCTURE *	findNearestReArmPad(DROID *psDroid, STRUCTURE *psTarget, bool bClear)
+STRUCTURE *findNearestReArmPad(DROID *psDroid, STRUCTURE *psTarget, bool bClear)
 {
 	STRUCTURE		*psStruct, *psNearest, *psTotallyClear;
 	SDWORD			xdiff,ydiff, mindist, currdist, totallyDist;
 	SDWORD			cx,cy;
 
-	ASSERT_OR_RETURN(NULL, psDroid != NULL, "findNearestReArmPad: No droid was passed.");
+	ASSERT_OR_RETURN(NULL, psDroid != NULL, "No droid was passed.");
 
 	if (psTarget != NULL)
 	{
@@ -6762,18 +6761,12 @@ STRUCTURE *	findNearestReArmPad(DROID *psDroid, STRUCTURE *psTarget, bool bClear
 		cx = (SDWORD)psDroid->pos.x;
 		cy = (SDWORD)psDroid->pos.y;
 	}
-
 	mindist = SDWORD_MAX;
 	totallyDist = SDWORD_MAX;
 	psNearest = NULL;
 	psTotallyClear = NULL;
-	STRUCTURE *hq = nullptr;
 	for(psStruct = apsStructLists[psDroid->player]; psStruct; psStruct=psStruct->psNext)
 	{
-		if (psStruct->pStructureType->type == REF_HQ)
-		{
-			hq = psStruct;
-		}
 		if ((psStruct->pStructureType->type == REF_REARM_PAD) &&
 			(psTarget == NULL || psTarget->cluster == psStruct->cluster) &&
 			(!bClear || clearRearmPad(psStruct)))
@@ -6799,13 +6792,10 @@ STRUCTURE *	findNearestReArmPad(DROID *psDroid, STRUCTURE *psTarget, bool bClear
 			}
 		}
 	}
-
 	if (bClear && (psTotallyClear != NULL))
 	{
 		psNearest = psTotallyClear;
 	}
-	psNearest = psNearest != nullptr? psNearest : hq;
-
 	return psNearest;
 }
 

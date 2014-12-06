@@ -33,7 +33,6 @@
 #include "lib/ivis_opengl/piestate.h"
 #include "lib/ivis_opengl/piepalette.h"
 #include "lib/ivis_opengl/pieclip.h"
-#include "lib/netplay/netplay.h"
 #include "piematrix.h"
 #include "screen.h"
 
@@ -142,11 +141,9 @@ static std::vector<ShadowcastingShape> scshapes;
 static std::vector<SHAPE> tshapes;
 static std::vector<SHAPE> shapes;
 
-static void pie_Draw3DButton(iIMDShape *shape)
+static void pie_Draw3DButton(iIMDShape *shape, PIELIGHT teamcolour)
 {
 	const PIELIGHT colour = WZCOL_WHITE;
-	const PIELIGHT teamcolour = pal_GetTeamColour(NetPlay.players[selectedPlayer].colour);
-	pie_SetAlphaTest(true);
 	pie_SetFogStatus(false);
 	pie_SetDepthBufferStatus(DEPTH_CMP_LEQ_WRT_ON);
 	pie_ActivateShader(SHADER_BUTTON, shape, teamcolour, colour);
@@ -169,12 +166,11 @@ static void pie_Draw3DButton(iIMDShape *shape)
 	pie_SetDepthBufferStatus(DEPTH_CMP_ALWAYS_WRT_ON);
 }
 
-static void pie_Draw3DShape2(iIMDShape *shape, int frame, PIELIGHT colour, PIELIGHT teamcolour, int pieFlag, int pieFlagData, glm::mat4 &matrix)
+static void pie_Draw3DShape2(const iIMDShape *shape, int frame, PIELIGHT colour, PIELIGHT teamcolour, int pieFlag, int pieFlagData, glm::mat4 &matrix)
 {
 	bool light = true;
 
 	glLoadMatrixf(&matrix[0][0]);
-	pie_SetAlphaTest((pieFlag & pie_PREMULTIPLIED) == 0);
 
 	/* Set fog status */
 	if (!(pieFlag & pie_FORCE_FOG) && (pieFlag & pie_ADDITIVE || pieFlag & pie_TRANSLUCENT || pieFlag & pie_PREMULTIPLIED))
@@ -208,6 +204,13 @@ static void pie_Draw3DShape2(iIMDShape *shape, int frame, PIELIGHT colour, PIELI
 	{
 		pie_SetRendMode(REND_OPAQUE);
 	}
+
+	if ((pieFlag & pie_PREMULTIPLIED) == 0)
+	{
+		glEnable(GL_ALPHA_TEST);
+		glAlphaFunc(GL_GREATER, 0.001f);
+	}
+
 	if (pieFlag & pie_ECM)
 	{
 		pie_SetRendMode(REND_ALPHA);
@@ -217,12 +220,14 @@ static void pie_Draw3DShape2(iIMDShape *shape, int frame, PIELIGHT colour, PIELI
 
 	if (light)
 	{
-		glMaterialfv(GL_FRONT, GL_AMBIENT, shape->material[LIGHT_AMBIENT]);
-		glMaterialfv(GL_FRONT, GL_DIFFUSE, shape->material[LIGHT_DIFFUSE]);
-		glMaterialfv(GL_FRONT, GL_SPECULAR, shape->material[LIGHT_SPECULAR]);
-		glMaterialf(GL_FRONT, GL_SHININESS, shape->shininess);
-		glMaterialfv(GL_FRONT, GL_EMISSION, shape->material[LIGHT_EMISSIVE]);
-		pie_ActivateShader(SHADER_COMPONENT, shape, teamcolour, colour);
+		if (shape->shaderProgram)
+		{
+			pie_ActivateShader(shape->shaderProgram, shape, teamcolour, colour);
+		}
+		else
+		{
+			pie_ActivateShader(SHADER_COMPONENT, shape, teamcolour, colour);
+		}
 	}
 	else
 	{
@@ -243,6 +248,7 @@ static void pie_Draw3DShape2(iIMDShape *shape, int frame, PIELIGHT colour, PIELI
 	polyCount += shape->npolys;
 
 	pie_SetShaderEcmEffect(false);
+	glDisable(GL_ALPHA_TEST);
 }
 
 static inline bool edgeLessThan(EDGE const &e1, EDGE const &e2)
@@ -403,13 +409,13 @@ void pie_Draw3DShape(iIMDShape *shape, int frame, int team, PIELIGHT colour, int
 	ASSERT(frame >= 0, "Negative frame %d", frame);
 	ASSERT(team >= 0, "Negative team %d", team);
 
+	const PIELIGHT teamcolour = pal_GetTeamColour(team);
 	if (pieFlag & pie_BUTTON)
 	{
-		pie_Draw3DButton(shape);
+		pie_Draw3DButton(shape, teamcolour);
 	}
 	else
 	{
-		const PIELIGHT teamcolour = pal_GetTeamColour(team);
 		SHAPE tshape;
 		tshape.shape = shape;
 		tshape.frame = frame;
@@ -484,7 +490,6 @@ static void pie_DrawShadows(void)
 
 	glPushMatrix();
 
-	pie_SetAlphaTest(false);
 	glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
 	glDepthFunc(GL_LESS);
 	glDepthMask(GL_FALSE);

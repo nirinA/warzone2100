@@ -28,7 +28,6 @@
 #include "lib/framework/endian_hack.h"
 #include "lib/framework/wzconfig.h"
 #include "lib/framework/file.h"
-#include "lib/framework/frameint.h"
 #include "lib/framework/physfs_ext.h"
 #include "lib/framework/strres.h"
 #include "lib/framework/opengl.h"
@@ -1529,7 +1528,7 @@ bool loadMissionExtras(const char *pGameToLoad, SWORD levelType)
 		{
 			//load in the message list file
 			aFileName[fileExten] = '\0';
-			strcat(aFileName, "messtate.ini");
+			strcat(aFileName, "messtate.json");
 			if (!loadSaveMessage(aFileName, levelType))
 			{
 				debug(LOG_ERROR, "Failed to load mission extras from %s", aFileName);
@@ -1968,7 +1967,7 @@ bool loadGame(const char *pGameToLoad, bool keepObjects, bool freeMem, bool User
 
 		//load in the templates
 		aFileName[fileExten] = '\0';
-		strcat(aFileName, "templates.ini");
+		strcat(aFileName, "templates.json");
 		//load the data into apsTemplates
 		if (!loadSaveTemplate(aFileName))
 		{
@@ -2013,7 +2012,7 @@ bool loadGame(const char *pGameToLoad, bool keepObjects, bool freeMem, bool User
 		// reload the objects that were in the mission list
 		//load in the features -do before the structures
 		aFileName[fileExten] = '\0';
-		strcat(aFileName, "mfeature.ini");
+		strcat(aFileName, "mfeature.json");
 
 		//load the data into apsFeatureLists
 		if (!loadSaveFeature2(aFileName))
@@ -2036,7 +2035,7 @@ bool loadGame(const char *pGameToLoad, bool keepObjects, bool freeMem, bool User
 
 		initStructLimits();
 		aFileName[fileExten] = '\0';
-		strcat(aFileName, "mstruct.ini");
+		strcat(aFileName, "mstruct.json");
 
 		//load in the mission structures
 		if (!loadSaveStructure2(aFileName, apsStructLists))
@@ -2064,7 +2063,7 @@ bool loadGame(const char *pGameToLoad, bool keepObjects, bool freeMem, bool User
 
 		// load in the mission droids, if any
 		aFileName[fileExten] = '\0';
-		strcat(aFileName, "mdroid.ini");
+		strcat(aFileName, "mdroid.json");
 		if (loadSaveDroid(aFileName, apsDroidLists))
 		{
 			droidMap.insert(aFileName, mission.apsDroidLists); // need to swap here to read correct list later
@@ -2081,7 +2080,7 @@ bool loadGame(const char *pGameToLoad, bool keepObjects, bool freeMem, bool User
 				if (psCurr->droidType != DROID_PERSON
 				// && psCurr->droidType != DROID_CYBORG
 				 && !cyborgDroid(psCurr)
-				 && (psCurr->droidType != DROID_TRANSPORTER && psCurr->droidType != DROID_SUPERTRANSPORTER)
+				 && (!isTransporter(psCurr))
 				 && psCurr->pos.x != INVALID_XY)
 				{
 					updateDroidOrientation(psCurr);
@@ -2124,7 +2123,7 @@ bool loadGame(const char *pGameToLoad, bool keepObjects, bool freeMem, bool User
 		{
 			//load in the message list file
 			aFileName[fileExten] = '\0';
-			strcat(aFileName, "fxstate.ini");
+			strcat(aFileName, "fxstate.json");
 
 			// load the fx data from the file
 			if (!readFXData(aFileName))
@@ -2154,7 +2153,7 @@ bool loadGame(const char *pGameToLoad, bool keepObjects, bool freeMem, bool User
 	{
 		//load in the research list file
 		aFileName[fileExten] = '\0';
-		strcat(aFileName, "resstate.ini");
+		strcat(aFileName, "resstate.json");
 		if (!loadSaveResearch(aFileName))
 		{
 			debug(LOG_ERROR, "Failed to load research data from %s", aFileName);
@@ -2166,7 +2165,7 @@ bool loadGame(const char *pGameToLoad, bool keepObjects, bool freeMem, bool User
 	{
 		//load in the droids
 		aFileName[fileExten] = '\0';
-		strcat(aFileName, "droid.ini");
+		strcat(aFileName, "droid.json");
 
 		//load the data into apsDroidLists
 		if (loadSaveDroid(aFileName, apsDroidLists))
@@ -2198,7 +2197,7 @@ bool loadGame(const char *pGameToLoad, bool keepObjects, bool freeMem, bool User
 	{
 		//load in the droids
 		aFileName[fileExten] = '\0';
-		strcat(aFileName, "droid.ini");
+		strcat(aFileName, "droid.json");
 
 		//load the data into apsDroidLists
 		if (!loadSaveDroid(aFileName, apsDroidLists))
@@ -2218,7 +2217,7 @@ bool loadGame(const char *pGameToLoad, bool keepObjects, bool freeMem, bool User
 			{
 				if (psCurr->droidType != DROID_PERSON
 				 && !cyborgDroid(psCurr)
-				 && (psCurr->droidType != DROID_TRANSPORTER && psCurr->droidType != DROID_SUPERTRANSPORTER)
+				 && (!isTransporter(psCurr))
 				 && psCurr->pos.x != INVALID_XY)
 				{
 					updateDroidOrientation(psCurr);
@@ -2229,7 +2228,7 @@ bool loadGame(const char *pGameToLoad, bool keepObjects, bool freeMem, bool User
 		{
 			//load in the mission droids
 			aFileName[fileExten] = '\0';
-			strcat(aFileName, "mdroid.ini");
+			strcat(aFileName, "mdroid.json");
 
 			// load the data into mission.apsDroidLists, if any
 			if (loadSaveDroid(aFileName, mission.apsDroidLists))
@@ -2243,7 +2242,7 @@ bool loadGame(const char *pGameToLoad, bool keepObjects, bool freeMem, bool User
 	{
 		// load in the limbo droids, if any
 		aFileName[fileExten] = '\0';
-		strcat(aFileName, "limbo.ini");
+		strcat(aFileName, "limbo.json");
 		if (loadSaveDroid(aFileName, apsLimboDroids))
 		{
 			droidMap.insert(aFileName, apsLimboDroids);
@@ -2252,7 +2251,7 @@ bool loadGame(const char *pGameToLoad, bool keepObjects, bool freeMem, bool User
 
 	//load in the features -do before the structures
 	aFileName[fileExten] = '\0';
-	strcat(aFileName, "feature.ini");
+	strcat(aFileName, "feature.json");
 	if (!loadSaveFeature2(aFileName))
 	{
 		aFileName[fileExten] = '\0';
@@ -2276,7 +2275,7 @@ bool loadGame(const char *pGameToLoad, bool keepObjects, bool freeMem, bool User
 	//load in the structures
 	initStructLimits();
 	aFileName[fileExten] = '\0';
-	strcat(aFileName, "struct.ini");
+	strcat(aFileName, "struct.json");
 	if (!loadSaveStructure2(aFileName, apsStructLists))
 	{
 		aFileName[fileExten] = '\0';
@@ -2305,7 +2304,7 @@ bool loadGame(const char *pGameToLoad, bool keepObjects, bool freeMem, bool User
 	{
 		//load in the component list file
 		aFileName[fileExten] = '\0';
-		strcat(aFileName, "complist.ini");
+		strcat(aFileName, "complist.json");
 		if (!loadSaveCompList(aFileName))
 		{
 			debug(LOG_ERROR, "failed to load %s", aFileName);
@@ -2313,7 +2312,7 @@ bool loadGame(const char *pGameToLoad, bool keepObjects, bool freeMem, bool User
 		}
 		//load in the structure type list file
 		aFileName[fileExten] = '\0';
-		strcat(aFileName, "strtype.ini");
+		strcat(aFileName, "strtype.json");
 		if (!loadSaveStructTypeList(aFileName))
 		{
 			debug(LOG_ERROR, "failed to load %s", aFileName);
@@ -2347,7 +2346,7 @@ bool loadGame(const char *pGameToLoad, bool keepObjects, bool freeMem, bool User
 			(gameType == GTYPE_SAVE_MIDMISSION))
 		{
 			aFileName[fileExten] = '\0';
-			strcat(aFileName, "score.ini");
+			strcat(aFileName, "score.json");
 
 			// Load the fx data from the chosen file
 			if (!readScoreData(aFileName))
@@ -2366,7 +2365,7 @@ bool loadGame(const char *pGameToLoad, bool keepObjects, bool freeMem, bool User
 		{
 			//load in the command list file
 			aFileName[fileExten] = '\0';
-			strcat(aFileName, "firesupport.ini");
+			strcat(aFileName, "firesupport.json");
 
 			if (!readFiresupportDesignators(aFileName))
 			{
@@ -2380,7 +2379,7 @@ bool loadGame(const char *pGameToLoad, bool keepObjects, bool freeMem, bool User
 	{
 		//load in the mission structures
 		aFileName[fileExten] = '\0';
-		strcat(aFileName, "limits.ini");
+		strcat(aFileName, "limits.json");
 
 		//load the data into apsStructLists
 		if (!loadSaveStructLimits(aFileName))
@@ -2425,7 +2424,7 @@ bool loadGame(const char *pGameToLoad, bool keepObjects, bool freeMem, bool User
 
 	// Load labels
 	aFileName[fileExten] = '\0';
-	strcat(aFileName, "labels.ini");
+	strcat(aFileName, "labels.json");
 	loadLabels(aFileName);
 
 	//if user save game then reset the time - THIS SETS BOTH TIMERS - BEWARE IF YOU USE IT
@@ -2546,17 +2545,17 @@ bool saveGame(char *aFileName, GAME_TYPE saveType)
 
 	// Save some game info
 	CurrentFileName[fileExtension] = '\0';
-	strcat(CurrentFileName, "gameinfo.ini");
+	strcat(CurrentFileName, "gameinfo.json");
 	writeGameInfo(CurrentFileName);
 
 	// Save labels
 	CurrentFileName[fileExtension] = '\0';
-	strcat(CurrentFileName, "labels.ini");
+	strcat(CurrentFileName, "labels.json");
 	writeLabels(CurrentFileName);
 
 	//create the droids filename
 	CurrentFileName[fileExtension] = '\0';
-	strcat(CurrentFileName, "droid.ini");
+	strcat(CurrentFileName, "droid.json");
 	/*Write the current droid lists to the file*/
 	if (!writeDroidFile(CurrentFileName, apsDroidLists))
 	{
@@ -2566,7 +2565,7 @@ bool saveGame(char *aFileName, GAME_TYPE saveType)
 
 	//create the structures filename
 	CurrentFileName[fileExtension] = '\0';
-	strcat(CurrentFileName, "struct.ini");
+	strcat(CurrentFileName, "struct.json");
 	/*Write the data to the file*/
 	if (!writeStructFile(CurrentFileName))
 	{
@@ -2576,7 +2575,7 @@ bool saveGame(char *aFileName, GAME_TYPE saveType)
 
 	//create the templates filename
 	CurrentFileName[fileExtension] = '\0';
-	strcat(CurrentFileName, "templates.ini");
+	strcat(CurrentFileName, "templates.json");
 	/*Write the data to the file*/
 	if (!writeTemplateFile(CurrentFileName))
 	{
@@ -2586,7 +2585,7 @@ bool saveGame(char *aFileName, GAME_TYPE saveType)
 
 	//create the features filename
 	CurrentFileName[fileExtension] = '\0';
-	strcat(CurrentFileName, "feature.ini");
+	strcat(CurrentFileName, "feature.json");
 	/*Write the data to the file*/
 	if (!writeFeatureFile(CurrentFileName))
 	{
@@ -2606,7 +2605,7 @@ bool saveGame(char *aFileName, GAME_TYPE saveType)
 
 	//create the strucutLimits filename
 	CurrentFileName[fileExtension] = '\0';
-	strcat(CurrentFileName, "limits.ini");
+	strcat(CurrentFileName, "limits.json");
 	/*Write the data to the file*/
 	if (!writeStructLimitsFile(CurrentFileName))
 	{
@@ -2616,7 +2615,7 @@ bool saveGame(char *aFileName, GAME_TYPE saveType)
 
 	//create the component lists filename
 	CurrentFileName[fileExtension] = '\0';
-	strcat(CurrentFileName, "complist.ini");
+	strcat(CurrentFileName, "complist.json");
 	/*Write the data to the file*/
 	if (!writeCompListFile(CurrentFileName))
 	{
@@ -2625,7 +2624,7 @@ bool saveGame(char *aFileName, GAME_TYPE saveType)
 	}
 	//create the structure type lists filename
 	CurrentFileName[fileExtension] = '\0';
-	strcat(CurrentFileName, "strtype.ini");
+	strcat(CurrentFileName, "strtype.json");
 	/*Write the data to the file*/
 	if (!writeStructTypeListFile(CurrentFileName))
 	{
@@ -2635,7 +2634,7 @@ bool saveGame(char *aFileName, GAME_TYPE saveType)
 
 	//create the research filename
 	CurrentFileName[fileExtension] = '\0';
-	strcat(CurrentFileName, "resstate.ini");
+	strcat(CurrentFileName, "resstate.json");
 	/*Write the data to the file*/
 	if (!writeResearchFile(CurrentFileName))
 	{
@@ -2645,7 +2644,7 @@ bool saveGame(char *aFileName, GAME_TYPE saveType)
 
 	//create the message filename
 	CurrentFileName[fileExtension] = '\0';
-	strcat(CurrentFileName, "messtate.ini");
+	strcat(CurrentFileName, "messtate.json");
 	/*Write the data to the file*/
 	if (!writeMessageFile(CurrentFileName))
 	{
@@ -2663,7 +2662,7 @@ bool saveGame(char *aFileName, GAME_TYPE saveType)
 	}
 
 	CurrentFileName[fileExtension] = '\0';
-	strcat(CurrentFileName, "fxstate.ini");
+	strcat(CurrentFileName, "fxstate.json");
 	/*Write the data to the file*/
 	if (!writeFXData(CurrentFileName))
 	{
@@ -2673,7 +2672,7 @@ bool saveGame(char *aFileName, GAME_TYPE saveType)
 
 	//added at V15 save
 	CurrentFileName[fileExtension] = '\0';
-	strcat(CurrentFileName, "score.ini");
+	strcat(CurrentFileName, "score.json");
 	/*Write the data to the file*/
 	if (!writeScoreData(CurrentFileName))
 	{
@@ -2682,7 +2681,7 @@ bool saveGame(char *aFileName, GAME_TYPE saveType)
 	}
 
 	CurrentFileName[fileExtension] = '\0';
-	strcat(CurrentFileName, "firesupport.ini");
+	strcat(CurrentFileName, "firesupport.json");
 	/*Write the data to the file*/
 	if (!writeFiresupportDesignators(CurrentFileName))
 	{
@@ -2705,7 +2704,7 @@ bool saveGame(char *aFileName, GAME_TYPE saveType)
 
 	//create the droids filename
 	CurrentFileName[fileExtension] = '\0';
-	strcat(CurrentFileName, "mdroid.ini");
+	strcat(CurrentFileName, "mdroid.json");
 	/*Write the swapped droid lists to the file*/
 	if (!writeDroidFile(CurrentFileName, mission.apsDroidLists))
 	{
@@ -2767,7 +2766,7 @@ bool saveGame(char *aFileName, GAME_TYPE saveType)
 
 		//create the structures filename
 		CurrentFileName[fileExtension] = '\0';
-		strcat(CurrentFileName, "mstruct.ini");
+		strcat(CurrentFileName, "mstruct.json");
 		/*Write the data to the file*/
 		if (!writeStructFile(CurrentFileName))
 		{
@@ -2777,7 +2776,7 @@ bool saveGame(char *aFileName, GAME_TYPE saveType)
 
 		//create the features filename
 		CurrentFileName[fileExtension] = '\0';
-		strcat(CurrentFileName, "mfeature.ini");
+		strcat(CurrentFileName, "mfeature.json");
 		/*Write the data to the file*/
 		if (!writeFeatureFile(CurrentFileName))
 		{
@@ -2870,23 +2869,23 @@ static bool gameLoad(const char* fileName)
 
 	// Prior to getting here, the directory structure has been set to whereever the
 	// map or savegame is loaded from, so we will get the right ruleset file.
-	if (!PHYSFS_exists("ruleset.ini"))
+	if (!PHYSFS_exists("ruleset.json"))
 	{
-		debug(LOG_ERROR, "ruleset.ini not found! User generated data will not work.");
+		debug(LOG_ERROR, "ruleset.json not found! User generated data will not work.");
 		memset(rulesettag, 0, sizeof(rulesettag));
 	}
 	else
 	{
-		WzConfig ruleset("ruleset.ini", WzConfig::ReadOnly);
-		if (!ruleset.contains("ruleset/tag"))
+		WzConfig ruleset("ruleset.json", WzConfig::ReadOnly);
+		if (!ruleset.contains("tag"))
 		{
-			debug(LOG_ERROR, "ruleset tag not found in ruleset.ini!"); // fall-through
+			debug(LOG_ERROR, "ruleset tag not found in ruleset.json!"); // fall-through
 		}
-		QString tag = ruleset.value("ruleset/tag", "[]").toString();
+		QString tag = ruleset.value("tag", "[]").toString();
 		sstrcpy(rulesettag, tag.toUtf8().constData());
 		if (strspn(rulesettag, "abcdefghijklmnopqrstuvwxyz") != strlen(rulesettag)) // for safety
 		{
-			debug(LOG_ERROR, "ruleset.ini userdata tag contains invalid characters!");
+			debug(LOG_ERROR, "ruleset.json userdata tag contains invalid characters!");
 			debug(LOG_ERROR, "User generated data will not work.");
 			memset(rulesettag, 0, sizeof(rulesettag));
 		}
@@ -3440,13 +3439,6 @@ bool gameLoadV(PHYSFS_file* fileHandle, unsigned int version)
 	}
 
 	debug(LOG_SAVE, "Savegame is of type: %u", saveGameData.sGame.type);
-
-	// Campaign games are fine, only skirmish games are broken in v36
-	if (saveGameData.sGame.type != CAMPAIGN && version == VERSION_36)
-	{
-		debug(LOG_ERROR, "Skirmish savegames of version %u are not supported in this release.", version);
-		return false;
-	}
 	game.type = saveGameData.sGame.type;
 	/* Test mod list */
 	if (version >= VERSION_38)
@@ -4092,7 +4084,7 @@ static bool loadSaveDroidPointers(const QString &pFileName, DROID **ppsCurrentDr
 	{
 		ini.beginGroup(list[i]);
 		DROID *psDroid;
-		int id = ini.value("id").toInt();
+		int id = ini.value("id", -1).toInt();
 		int player = getPlayer(ini);
 
 		if (id <= 0)
@@ -4108,7 +4100,7 @@ static bool loadSaveDroidPointers(const QString &pFileName, DROID **ppsCurrentDr
 
 		for (psDroid = ppsCurrentDroidLists[player]; psDroid && psDroid->id != id; psDroid = psDroid->psNext)
 		{
-			if ((psDroid->droidType == DROID_TRANSPORTER || psDroid->droidType == DROID_SUPERTRANSPORTER) && psDroid->psGroup != NULL)  // Check for droids in the transporter.
+			if (isTransporter(psDroid) && psDroid->psGroup != NULL)  // Check for droids in the transporter.
 			{
 				for (DROID *psTrDroid = psDroid->psGroup->psList; psTrDroid != NULL; psTrDroid = psTrDroid->psGrpNext)
 				{
@@ -4216,7 +4208,7 @@ static bool loadSaveDroid(const char *pFileName, DROID **ppsCurrentDroidLists)
 		ini.beginGroup(sortedList[i].second);
 		DROID *psDroid;
 		int player = getPlayer(ini);
-		int id = ini.value("id").toInt();
+		int id = ini.value("id", -1).toInt();
 		Position pos = ini.vector3i("position");
 		Rotation rot = ini.vector3i("rotation");
 		Vector2i tmp;
@@ -4268,7 +4260,7 @@ static bool loadSaveDroid(const char *pFileName, DROID **ppsCurrentDroidLists)
 		/* Create the Droid */
 		turnOffMultiMsg(true);
 		psDroid = reallyBuildDroid(psTemplate, pos, player, onMission, rot);
-		ASSERT_OR_RETURN(NULL, psDroid != NULL, "Failed to build unit %d", id);
+		ASSERT_OR_RETURN(NULL, psDroid != NULL, "Failed to build unit %s", sortedList[i].second.toUtf8().constData());
 		turnOffMultiMsg(false);
 
 		// Copy the values across
@@ -4278,6 +4270,7 @@ static bool loadSaveDroid(const char *pFileName, DROID **ppsCurrentDroidLists)
 		}
 		ASSERT(id != 0, "Droid ID should never be zero here");
 		psDroid->body = healthValue(ini, psDroid->originalBody);
+		ASSERT(psDroid->body != 0, "%s : %d has zero hp!", pFileName, i);
 		psDroid->periodicalDamage = ini.value("periodicalDamage", 0).toInt();
 		psDroid->periodicalDamageStart = ini.value("periodicalDamageStart", 0).toInt();
 		psDroid->experience = ini.value("experience", 0).toInt();
@@ -4317,8 +4310,7 @@ static bool loadSaveDroid(const char *pFileName, DROID **ppsCurrentDroidLists)
 		}
 		else
 		{
-			if (psDroid->droidType == DROID_TRANSPORTER
-			    || psDroid->droidType == DROID_SUPERTRANSPORTER
+			if (isTransporter(psDroid)
 			    || psDroid->droidType == DROID_COMMAND)
 			{
 				DROID_GROUP *psGroup = grpCreate();
@@ -4394,7 +4386,7 @@ static bool loadSaveDroid(const char *pFileName, DROID **ppsCurrentDroidLists)
 			scriptSetStartPos(psDroid->player, psDroid->pos.x, psDroid->pos.y);	// set map start position, FIXME - save properly elsewhere!
 		}
 
-		if (psDroid->psGroup == NULL || psDroid->psGroup->type != GT_TRANSPORTER || psDroid->droidType == DROID_TRANSPORTER || psDroid->droidType == DROID_SUPERTRANSPORTER)  // do not add to list if on a transport, then the group list is used instead
+		if (psDroid->psGroup == NULL || psDroid->psGroup->type != GT_TRANSPORTER || isTransporter(psDroid))  // do not add to list if on a transport, then the group list is used instead
 		{
 			addDroid(psDroid, ppsCurrentDroidLists);
 		}
@@ -4528,7 +4520,7 @@ static bool writeDroidFile(const char *pFileName, DROID **ppsCurrentDroidLists)
 		for (DROID *psCurr = ppsCurrentDroidLists[player]; psCurr != NULL; psCurr = psCurr->psNext)
 		{
 			writeDroid(ini, psCurr, onMission, counter);
-			if (psCurr->droidType == DROID_TRANSPORTER || psCurr->droidType == DROID_SUPERTRANSPORTER)	// if transporter save any droids in the grp
+			if (isTransporter(psCurr))	// if transporter save any droids in the grp
 			{
 				for (DROID *psTrans = psCurr->psGroup->psList; psTrans != NULL; psTrans = psTrans->psGrpNext)
 				{
@@ -4751,7 +4743,7 @@ static bool loadSaveStructure2(const char *pFileName, STRUCTURE **ppList)
 
 		ini.beginGroup(list[i]);
 		int player = getPlayer(ini);
-		int id = ini.value("id").toInt();
+		int id = ini.value("id", -1).toInt();
 		Position pos = ini.vector3i("position");
 		Rotation rot = ini.vector3i("rotation");
 		QString name = ini.value("name").toString();
@@ -4791,7 +4783,7 @@ static bool loadSaveStructure2(const char *pFileName, STRUCTURE **ppList)
 		if (map_coord(pos.x) < TOO_NEAR_EDGE || map_coord(pos.x) > mapWidth - TOO_NEAR_EDGE
 		    || map_coord(pos.y) < TOO_NEAR_EDGE || map_coord(pos.y) > mapHeight - TOO_NEAR_EDGE)
 		{
-			debug(LOG_ERROR, "Structure %s, coord too near the edge of the map. id - %d", name.toUtf8().constData(), id);
+			debug(LOG_ERROR, "Structure %s (%s), coord too near the edge of the map", name.toUtf8().constData(), list[i].toUtf8().constData());
 			ini.endGroup();
 			continue; // skip it
 		}
@@ -5188,7 +5180,7 @@ bool loadSaveStructurePointers(QString filename, STRUCTURE **ppList)
 		ini.beginGroup(list[i]);
 		STRUCTURE *psStruct;
 		int player = getPlayer(ini);
-		int id = ini.value("id").toInt();
+		int id = ini.value("id", -1).toInt();
 		for (psStruct = ppList[player]; psStruct && psStruct->id != id; psStruct = psStruct->psNext) { }
 		if (!psStruct)
 		{
@@ -5419,7 +5411,15 @@ bool loadSaveFeature2(const char *pFileName)
 			scriptSetDerrickPos(pFeature->pos.x, pFeature->pos.y);
 		}
 		//restore values
-		pFeature->id = ini.value("id").toInt();
+		int id = ini.value("id", -1).toInt();
+		if (id > 0)
+		{
+			pFeature->id = id;
+		}
+		else
+		{
+			pFeature->id = generateSynchronisedObjectId();
+		}
 		pFeature->rot = ini.vector3i("rotation");
 		pFeature->periodicalDamage = ini.value("periodicalDamage", 0).toInt();
 		pFeature->periodicalDamageStart = ini.value("periodicalDamageStart", 0).toInt();
@@ -6221,7 +6221,7 @@ static bool	writeScriptState(const char *pFileName)
 	strcpy(jsFilename, pFileName);
 	ext = strrchr(jsFilename, '/');
 	*ext = '\0';
-	strcat(jsFilename, "/scriptstate.ini");
+	strcat(jsFilename, "/scriptstate.json");
 	saveScriptStates(jsFilename);
 
 	return true;
@@ -6237,7 +6237,7 @@ bool loadScriptState(char *pFileName)
 
 	// The below belongs to the new javascript stuff
 	strcpy(jsFilename, pFileName);
-	strcat(jsFilename, "/scriptstate.ini");
+	strcat(jsFilename, "/scriptstate.json");
 	loadScriptStates(jsFilename);
 
 	// change the file extension
@@ -6334,7 +6334,7 @@ bool plotStructurePreview16(char *backDropSprite, Vector2i playeridpos[])
 	{
 		strcpy(aFileName, psLevel->apDataFiles[0]);
 		aFileName[strlen(aFileName) - 4] = '\0';
-		strcat(aFileName, "/struct.ini");
+		strcat(aFileName, "/struct.json");
 		WzConfig ini(aFileName, WzConfig::ReadOnly);
 		QStringList list = ini.childGroups();
 		for (int i = 0; i < list.size(); ++i)
@@ -6530,9 +6530,9 @@ static void plotFeature(char *backDropSprite)
 	{
 		strcpy(aFileName, psLevel->apDataFiles[0]);
 		aFileName[strlen(aFileName) - 4] = '\0';
-		strcat(aFileName, "/feature.ini");
+		strcat(aFileName, "/feature.json");
 		WzConfig ini(aFileName, WzConfig::ReadOnly);
-		if (ini.status() != QSettings::NoError)
+		if (!ini.status())
 		{
 			debug(LOG_ERROR, "Could not open %s", aFileName);
 			return;

@@ -22,17 +22,60 @@
  *  Ini related functions.
  */
 
+#include <QtCore/QJsonParseError>
+#include <QtCore/QJsonValue>
+#include <QtCore/QJsonDocument>
+
 // Get platform defines before checking for them.
 // Qt headers MUST come before platform specific stuff!
 #include "wzconfig.h"
+#include "file.h"
+
+WzConfig::~WzConfig()
+{
+	if (mWarning == ReadAndWrite)
+	{
+		QJsonDocument doc(mObj);
+		QByteArray json = doc.toJson();
+		saveFile(mFilename.toUtf8().constData(), json.constData(), json.size());
+	}
+}
 
 WzConfig::WzConfig(const QString &name, WzConfig::warning warning, QObject *parent)
-	: WzConfigHack(name, (int)warning), m_settings(QString("wz::") + name, QSettings::IniFormat, parent), m_overrides()
 {
-	if (m_settings.status() != QSettings::NoError && (warning != ReadOnly || PHYSFS_exists(name.toUtf8().constData())))
+	UDWORD size;
+	char *data;
+	QJsonParseError error;
+
+	mFilename = name;
+	mStatus = true;
+	mWarning = warning;
+
+	if (!PHYSFS_exists(name.toUtf8().constData()))
+	{
+		if (warning == ReadOnly)
+		{
+			mStatus = false;
+			debug(LOG_ERROR, "IGNORED %s", name.toUtf8().constData());
+			return;
+		}
+		else if (warning == ReadAndWrite)
+		{
+			mJson = QJsonDocument();
+			mObj = mJson.object();
+			debug(LOG_ERROR, "PREPARED %s", name.toUtf8().constData());
+			return;
+		}
+	}
+	if (!loadFile(name.toUtf8().constData(), &data, &size))
 	{
 		debug(LOG_FATAL, "Could not open \"%s\"", name.toUtf8().constData());
 	}
+	mJson = QJsonDocument::fromJson(QByteArray(data, size), &error);
+	ASSERT(!mJson.isNull(), "JSON document from %s is invalid: %s", name.toUtf8().constData(), error.errorString().toUtf8().constData());
+	ASSERT(mJson.isObject(), "JSON document from %s is not an object. Read: \n%s", name.toUtf8().constData(), data);
+	mObj = mJson.object();
+#if 0
 	char **diffList = PHYSFS_enumerateFiles("diffs");
 	char **i;
 	int j;
@@ -53,66 +96,34 @@ WzConfig::WzConfig(const QString &name, WzConfig::warning warning, QObject *pare
 		}
 	}
 	PHYSFS_freeList(diffList);
+#endif
 }
 
 QStringList WzConfig::childGroups() const
 {
-	QStringList ret(m_settings.childGroups());
-	int i,j;
-	QStringList keys(m_overrides.keys());
-	QString group = slashedGroup();
-	for (i = 0; i < keys.length(); i++)
-	{
-		if (!keys[i].startsWith(group)) 
-			continue;
-		keys[i].remove(0, group.length());
-		j = keys[i].indexOf("/");
-		if (j == -1)
-			continue;
-		keys[i].truncate(j);
-		if (ret.contains(keys[i]))
-			continue;
-		ret.append(keys[i]);
-	}
-	return ret;
+	return mObj.keys();
 }
 
 QStringList WzConfig::childKeys() const
 {
-	QStringList ret(m_settings.childKeys());
-	int i;
-	QStringList keys(m_overrides.keys());
-	QString group = slashedGroup();
-	for (i = 0; i < keys.length(); i++)
-	{
-		if (!keys[i].startsWith(group)) 
-			continue;
-		keys[i].remove(0, group.length());
-		if (keys[i].indexOf("/") > -1)
-			continue;
-		if (ret.contains(keys[i]))
-			continue;
-		ret.append(keys[i]);
-	}
-	return ret;
+	return mObj.keys();
 }
 
 bool WzConfig::contains(const QString &key) const
 {
-	if (m_overrides.contains(slashedGroup() + key))
-	{
-		return true;
-	}
-	return m_settings.contains(key);
+	return mObj.contains(key);
 }
 
 QVariant WzConfig::value(const QString &key, const QVariant &defaultValue) const
 {
-	if (m_overrides.contains(slashedGroup() + key))
-	{
-		return m_overrides.value(slashedGroup() + key);
-	}
-	return m_settings.value(key,defaultValue);
+	if (!contains(key)) return defaultValue;
+	else return mObj.value(key).toVariant();
+}
+
+QJsonValue WzConfig::json(const QString &key, const QJsonValue &defaultValue) const
+{
+	if (!contains(key)) return defaultValue;
+	else return mObj.value(key);
 }
 
 void WzConfig::setVector3f(const QString &name, const Vector3f &v)
@@ -174,4 +185,42 @@ Vector2i WzConfig::vector2i(const QString &name)
 	r.x = v[0].toInt();
 	r.y = v[1].toInt();
 	return r;
+}
+
+void WzConfig::beginGroup(const QString &prefix)
+{
+	mObjNameStack.append(prefix);
+	mObjStack.append(mObj);
+	mName = prefix;
+	if (mWarning == ReadAndWrite)
+	{
+		mObj = QJsonObject();
+		return;
+	}
+	ASSERT(mWarning == ReadAndWrite || contains(prefix), "beginGroup() on non-existing key %s", prefix.toUtf8().constData());
+	QJsonValue value = mObj.value(prefix);
+	ASSERT(value.isObject(), "beginGroup() on non-object key %s", prefix.toUtf8().constData());
+	mObj = value.toObject();
+}
+
+void WzConfig::endGroup()
+{
+	ASSERT(mObjStack.size() > 0, "An endGroup() too much!");
+	if (mWarning == ReadAndWrite)
+	{
+		QJsonObject latestObj = mObj;
+		mObj = mObjStack.takeLast();
+		mObj[mName] = latestObj;
+		mName = mObjNameStack.takeLast();
+	}
+	else
+	{
+		mName = mObjNameStack.takeLast();
+		mObj = mObjStack.takeLast();
+	}
+}
+
+void WzConfig::setValue(const QString &key, const QVariant &value)
+{
+	mObj.insert(key, QJsonValue::fromVariant(value));
 }

@@ -1,6 +1,14 @@
 AM_CPPFLAGS = -DYY_NO_INPUT $(SDL_CFLAGS) $(PHYSFS_CFLAGS) $(PNG_CFLAGS) $(VORBISFILE_CFLAGS) $(VORBIS_CFLAGS) $(OPENAL_CFLAGS) $(OPENGLC_CFLAGS) $(OPENGL_CFLAGS) $(WZ_CPPFLAGS) $(GLEW_CFLAGS) $(LIBCRYPTO_CFLAGS)
 AM_CFLAGS = $(WZ_CFLAGS)
-AM_CXXFLAGS = $(WZ_CXXFLAGS) $(QT4_CFLAGS)
+AM_CXXFLAGS = $(WZ_CXXFLAGS) $(QT5_CFLAGS)
+
+# Here, we need to set "plugins" for Qt5 to be static
+# FIXME: At a future date, we should check if they want static builds, but, since we only support those for now...
+if MINGW32
+AM_CFLAGS += -DQT_STATICPLUGIN
+AM_CPPFLAGS += -DQT_STATICPLUGIN
+AM_CXXFLAGS += -DQT_STATICPLUGIN
+endif
 
 MOCHEADER = \
 	multiint.h \
@@ -8,17 +16,16 @@ MOCHEADER = \
 MOCEDFILES = $(MOCHEADER:%.h=%_moc.cpp)
 
 %_moc.cpp: %.h
-	$(MOC4) -o $@ $<
+	$(MOC5) -o $@ $<
 
 .PHONY: autorevision.h
 
 autorevision.h autorevision.cache:
 	cd $(top_srcdir) && ./build_tools/autorevision -t h -o $(abs_builddir)/autorevision.cache > $(abs_builddir)/autorevision.h.new
-	cmp -s autorevision.h.new autorevision.h || mv -f autorevision.h.new autorevision.h
+	cmp -s autorevision.h.new autorevision.h && rm autorevision.h.new || mv -f autorevision.h.new autorevision.h
 
 CLEANFILES = \
 	$(BUILT_SOURCES) \
-	autorevision.cache \
 	autorevision.h.new \
 	$(MOCEDFILES)
 
@@ -29,7 +36,12 @@ EXTRA_DIST = \
 	autorevision.cache \
 	cursorselection
 
+if PORTABLE
+bin_PROGRAMS = warzone2100_portable
+else
 bin_PROGRAMS = warzone2100
+endif
+
 noinst_HEADERS = \
 	action.h \
 	actiondef.h \
@@ -158,11 +170,11 @@ noinst_HEADERS = \
 	wrappers.h \
 	$(MOCHEADER)
 
-nodist_warzone2100_SOURCES = \
+nodist_COMMONSOURCES = \
 	multiint_moc.cpp \
 	qtscriptdebug_moc.cpp
 
-warzone2100_SOURCES = \
+COMMONSOURCES = \
 	action.cpp \
 	advvis.cpp \
 	ai.cpp \
@@ -272,7 +284,9 @@ warzone2100_SOURCES = \
 	wavecast.cpp \
 	wrappers.cpp
 
-warzone2100_LIBS = \
+
+
+COMMONLIBS = \
 	$(top_builddir)/lib/widget/libwidget.a \
 	$(top_builddir)/lib/sequence/libsequence.a \
 	$(top_builddir)/lib/sound/libsound.a \
@@ -285,18 +299,54 @@ warzone2100_LIBS = \
 	$(top_builddir)/3rdparty/miniupnpc/libminiupnpc.a \
 	$(top_builddir)/3rdparty/quesoglc/libquesoglc.a
 
+if PORTABLE
+warzone2100_portable_SOURCES = $(COMMONSOURCES) $(nodist_COMMONSOURCES)
+warzone2100_portable_LIBS = $(COMMONLIBS)
+else
+warzone2100_SOURCES = $(COMMONSOURCES) $(nodist_COMMONSOURCES)
+warzone2100_LIBS = $(COMMONLIBS)
+endif
+
 if BACKEND_QT
+if PORTABLE
+warzone2100_portable_LIBS += $(top_builddir)/lib/qtgame/libqtgame.a
+else
 warzone2100_LIBS += $(top_builddir)/lib/qtgame/libqtgame.a
+endif
 endif
 
 if BACKEND_SDL
+if PORTABLE
+warzone2100_portable_LIBS += $(top_builddir)/lib/sdl/libsdl.a
+else
 warzone2100_LIBS += $(top_builddir)/lib/sdl/libsdl.a
 endif
+endif
 
-warzone2100_LDADD = $(warzone2100_LIBS) $(LTLIBINTL) $(SDL_LIBS) $(PHYSFS_LIBS) $(PNG_LIBS) $(VORBISFILE_LIBS) $(VORBIS_LIBS) \
-	$(THEORA_LIBS) $(OPENAL_LIBS) $(OPENGLC_LIBS) $(OPENGL_LIBS) $(QT4_LIBS) $(GLEW_LIBS) \
+# Here, we need to bring in the "plugins" for Qt5 and they MUST come before the other QT libs.
+# FIXME: At a future date, we should check if they want static builds, but, since we only support those for now...
+if MINGW32
+SQT5_LIBS = -lQt5PlatformSupport -lqwindows
+else
+SQT5_LIBS =
+endif
+
+if PORTABLE
+warzone2100_portable_LDADD = $(warzone2100_portable_LIBS) $(LTLIBINTL) $(SDL_LIBS) $(PHYSFS_LIBS) $(PNG_LIBS) $(VORBISFILE_LIBS) $(VORBIS_LIBS) \
+	$(THEORA_LIBS) $(OPENAL_LIBS) $(OPENGLC_LIBS) $(OPENGL_LIBS) $(SQT5_LIBS) $(QT5_LIBS) $(GLEW_LIBS) \
 	$(X_LIBS) $(X_EXTRA_LIBS) $(LIBCRYPTO_LIBS) $(LDFLAGS)
+else
+warzone2100_LDADD = $(warzone2100_LIBS) $(LTLIBINTL) $(SDL_LIBS) $(PHYSFS_LIBS) $(PNG_LIBS) $(VORBISFILE_LIBS) $(VORBIS_LIBS) \
+	$(THEORA_LIBS) $(OPENAL_LIBS) $(OPENGLC_LIBS) $(OPENGL_LIBS) $(SQT5_LIBS) $(QT5_LIBS) $(GLEW_LIBS) \
+	$(X_LIBS) $(X_EXTRA_LIBS) $(LIBCRYPTO_LIBS) $(LDFLAGS)
+endif
+
 
 if MINGW32
-warzone2100_LDADD += $(top_builddir)/win32/warzone2100.o $(WIN32_LIBS)
+if PORTABLE
+warzone2100_portable_LDADD += $(top_builddir)/win32/warzone2100_portable.o $(WIN32_LIBS)
+else
+warzone2100_LDADD += $(top_builddir)/win32/warzone2100.o  $(WIN32_LIBS)
 endif
+endif
+

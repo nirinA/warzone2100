@@ -61,32 +61,25 @@ bool setPlayerColour(UDWORD player, UDWORD col)
 
 UBYTE getPlayerColour(UDWORD pl)
 {
+	if (pl == MAX_PLAYERS)
+	{
+		return 0; // baba
+	}
+	ASSERT_OR_RETURN(0, pl < MAX_PLAYERS, "Invalid player number %u", pl);
 	return NetPlay.players[pl].colour;
 }
 
-
-static void setMatrix(Vector3i *Position, Vector3i *Rotation, bool RotXYZ, int scale)
+static void setMatrix(const Vector3i *Position, const Vector3i *Rotation, int scale)
 {
 	pie_PerspectiveBegin();
 	pie_MatBegin();
 
 	pie_TRANSLATE(Position->x, Position->y, Position->z);
-
-	if (RotXYZ)
-	{
-		pie_MatRotX(DEG(Rotation->x));
-		pie_MatRotY(DEG(Rotation->y));
-		pie_MatRotZ(DEG(Rotation->z));
-	}
-	else
-	{
-		pie_MatRotY(DEG(Rotation->y));
-		pie_MatRotX(DEG(Rotation->x));
-		pie_MatRotZ(DEG(Rotation->z));
-	}
+	pie_MatRotX(DEG(Rotation->x));
+	pie_MatRotY(DEG(Rotation->y));
+	pie_MatRotZ(DEG(Rotation->z));
 	pie_MatScale(scale / 100.f);
 }
-
 
 static void unsetMatrix(void)
 {
@@ -162,11 +155,6 @@ UDWORD getStructureStatSizeMax(STRUCTURE_STATS *Stats)
 	return MAX(Stats->baseWidth, Stats->baseBreadth);
 }
 
-static UDWORD getStructureHeight(STRUCTURE *psStructure)
-{
-	return (getStructureStatHeight(psStructure->pStructureType));
-}
-
 UDWORD getStructureStatHeight(STRUCTURE_STATS *psStat)
 {
 	if (psStat->pIMD[0])
@@ -177,129 +165,26 @@ UDWORD getStructureStatHeight(STRUCTURE_STATS *psStat)
 	return 0;
 }
 
-
-void displayIMDButton(iIMDShape *IMDShape, Vector3i *Rotation, Vector3i *Position, bool RotXYZ, SDWORD scale)
+void displayIMDButton(iIMDShape *IMDShape, const Vector3i *Rotation, const Vector3i *Position, int scale)
 {
-	setMatrix(Position, Rotation, RotXYZ, scale);
+	setMatrix(Position, Rotation, scale);
 	pie_Draw3DShape(IMDShape, 0, getPlayerColour(selectedPlayer), WZCOL_WHITE, pie_BUTTON, 0);
 	unsetMatrix();
 }
 
-
-//changed it to loop thru and draw all weapons
-void displayStructureButton(STRUCTURE *psStructure, Vector3i *rotation, Vector3i *Position, bool RotXYZ, SDWORD scale)
+static void sharedStructureButton(STRUCTURE_STATS *Stats, iIMDShape *strImd, const Vector3i *Rotation, const Vector3i *Position, int scale)
 {
-	iIMDShape *baseImd, *strImd;
-	iIMDShape *mountImd[STRUCT_MAXWEAPS];
-	iIMDShape *weaponImd[STRUCT_MAXWEAPS];
-	UDWORD			nWeaponStat;
-	int		i;
+	iIMDShape *baseImd, *mountImd[STRUCT_MAXWEAPS], *weaponImd[STRUCT_MAXWEAPS];
+	Vector3i pos = *Position;
 
-	/*HACK HACK HACK!
-	if its a 'tall thin (ie tower)' structure with something on the top - offset the
-	position to show the object on top*/
-	if (psStructure->pStructureType->pIMD[0]->nconnectors && scale == SMALL_STRUCT_SCALE &&
-	    getStructureHeight(psStructure) > TOWER_HEIGHT)
+	/* HACK HACK HACK!
+	if its a 'tall thin (ie tower)' structure stat with something on the top - offset the position to show the object on top */
+	if (strImd->nconnectors && scale == SMALL_STRUCT_SCALE && getStructureStatHeight(Stats) > TOWER_HEIGHT)
 	{
-		Position->y -= 20;
+		pos.y -= 20;
 	}
 
-	setMatrix(Position, rotation, RotXYZ, scale);
-
-	/* Draw the building's base first */
-	baseImd = psStructure->pStructureType->pBaseIMD;
-	if (baseImd != NULL)
-	{
-		pie_Draw3DShape(baseImd, 0, getPlayerColour(selectedPlayer), WZCOL_WHITE, pie_BUTTON, 0);
-	}
-	pie_Draw3DShape(psStructure->sDisplay.imd, 0, getPlayerColour(selectedPlayer), WZCOL_WHITE, pie_BUTTON, 0);
-	//and draw the turret
-	if (psStructure->sDisplay.imd->nconnectors)
-	{
-		for (i = 0; i < STRUCT_MAXWEAPS; i++)
-		{
-			weaponImd[i] = NULL;//weapon is gun ecm or sensor
-			mountImd[i] = NULL;
-		}
-
-		strImd = psStructure->sDisplay.imd;
-		//get an imd to draw on the connector priority is weapon, ECM, sensor
-		//check for weapon
-		for (i = 0; i < MAX(1, psStructure->numWeaps); i++)
-		{
-			if (psStructure->asWeaps[i].nStat > 0)
-			{
-				nWeaponStat = psStructure->asWeaps[i].nStat;
-				weaponImd[i] =  asWeaponStats[nWeaponStat].pIMD;
-				mountImd[i] =  asWeaponStats[nWeaponStat].pMountGraphic;
-			}
-
-			if (weaponImd[i] == NULL)
-			{
-				//check for ECM
-				if (psStructure->pStructureType->pECM != NULL)
-				{
-					weaponImd[i] =  psStructure->pStructureType->pECM->pIMD;
-					mountImd[i] =  psStructure->pStructureType->pECM->pMountGraphic;
-				}
-			}
-
-			if (weaponImd[i] == NULL)
-			{
-				//check for sensor
-				if (psStructure->pStructureType->pSensor != NULL)
-				{
-					weaponImd[i] =  psStructure->pStructureType->pSensor->pIMD;
-					mountImd[i]  =  psStructure->pStructureType->pSensor->pMountGraphic;
-				}
-			}
-		}
-
-		//draw Weapon/ECM/Sensor for structure
-		//uses 0
-		if (weaponImd[0] != NULL)
-		{
-			for (i = 0; i < MAX(1, psStructure->numWeaps); i++)
-			{
-				Rotation rot = structureGetInterpolatedWeaponRotation(psStructure, i, graphicsTime);
-
-				pie_MatBegin();
-				pie_TRANSLATE(strImd->connectors[i].x, strImd->connectors[i].z, strImd->connectors[i].y);
-				pie_MatRotY(-rot.direction);
-				if (mountImd[i] != NULL)
-				{
-					pie_Draw3DShape(mountImd[i], 0, getPlayerColour(selectedPlayer), WZCOL_WHITE, pie_BUTTON, 0);
-					if (mountImd[i]->nconnectors)
-					{
-						pie_TRANSLATE(mountImd[i]->connectors->x, mountImd[i]->connectors->z, mountImd[i]->connectors->y);
-					}
-				}
-				pie_MatRotX(rot.pitch);
-				pie_Draw3DShape(weaponImd[i], 0, getPlayerColour(selectedPlayer), WZCOL_WHITE, pie_BUTTON, 0);
-				//we have a droid weapon so do we draw a muzzle flash
-				pie_MatEnd();
-			}
-		}
-	}
-	unsetMatrix();
-}
-
-void displayStructureStatButton(STRUCTURE_STATS *Stats, Vector3i *Rotation, Vector3i *Position, bool RotXYZ, SDWORD scale)
-{
-	iIMDShape *baseImd, *strImd;
-	iIMDShape *mountImd[STRUCT_MAXWEAPS];
-	iIMDShape *weaponImd[STRUCT_MAXWEAPS];
-	UBYTE	i;
-
-	/*HACK HACK HACK!
-	if its a 'tall thin (ie tower)' structure stat with something on the top - offset the
-	position to show the object on top*/
-	if (Stats->pIMD[0]->nconnectors && scale == SMALL_STRUCT_SCALE && getStructureStatHeight(Stats) > TOWER_HEIGHT)
-	{
-		Position->y -= 20;
-	}
-
-	setMatrix(Position, Rotation, RotXYZ, scale);
+	setMatrix(&pos, Rotation, scale);
 
 	/* Draw the building's base first */
 	baseImd = Stats->pBaseIMD;
@@ -308,29 +193,22 @@ void displayStructureStatButton(STRUCTURE_STATS *Stats, Vector3i *Rotation, Vect
 	{
 		pie_Draw3DShape(baseImd, 0, getPlayerColour(selectedPlayer), WZCOL_WHITE, pie_BUTTON, 0);
 	}
-	pie_Draw3DShape(Stats->pIMD[0], 0, getPlayerColour(selectedPlayer), WZCOL_WHITE, pie_BUTTON, 0);
+	pie_Draw3DShape(strImd, 0, getPlayerColour(selectedPlayer), WZCOL_WHITE, pie_BUTTON, 0);
 
 	//and draw the turret
-	if (Stats->pIMD[0]->nconnectors)
+	if (strImd->nconnectors)
 	{
-		if (Stats->numWeaps > 0)
+		weaponImd[0] = NULL;
+		mountImd[0] = NULL;
+		for (int i = 0; i < Stats->numWeaps; i++)
 		{
-			for (i = 0; i < Stats->numWeaps; i++)
-			{
-				weaponImd[i] = NULL;//weapon is gun ecm or sensor
-				mountImd[i] = NULL;
-			}
+			weaponImd[i] = NULL;//weapon is gun ecm or sensor
+			mountImd[i] = NULL;
 		}
-		else
-		{
-			weaponImd[0] = NULL;
-			mountImd[0] = NULL;
-		}
-		strImd = Stats->pIMD[0];
 		//get an imd to draw on the connector priority is weapon, ECM, sensor
 		//check for weapon
 		//can only have the STRUCT_MAXWEAPS
-		for (i = 0; i < MAX(1, Stats->numWeaps); i++)
+		for (int i = 0; i < MAX(1, Stats->numWeaps); i++)
 		{
 			//can only have the one
 			if (Stats->psWeapStat[i] != NULL)
@@ -363,7 +241,7 @@ void displayStructureStatButton(STRUCTURE_STATS *Stats, Vector3i *Rotation, Vect
 		//draw Weapon/ECM/Sensor for structure
 		if (weaponImd[0] != NULL)
 		{
-			for (i = 0; i < MAX(1, Stats->numWeaps); i++)
+			for (int i = 0; i < MAX(1, Stats->numWeaps); i++)
 			{
 				pie_MatBegin();
 				pie_TRANSLATE(strImd->connectors[i].x, strImd->connectors[i].z, strImd->connectors[i].y);
@@ -385,10 +263,19 @@ void displayStructureStatButton(STRUCTURE_STATS *Stats, Vector3i *Rotation, Vect
 	unsetMatrix();
 }
 
+void displayStructureButton(STRUCTURE *psStructure, const Vector3i *rotation, const Vector3i *Position, int scale)
+{
+	sharedStructureButton(psStructure->pStructureType, psStructure->sDisplay.imd, rotation, Position, scale);
+}
+
+void displayStructureStatButton(STRUCTURE_STATS *Stats, const Vector3i *rotation, const Vector3i *Position, int scale)
+{
+	sharedStructureButton(Stats, Stats->pIMD[0], rotation, Position, scale);
+}
 
 // Render a component given a BASE_STATS structure.
 //
-void displayComponentButton(BASE_STATS *Stat, Vector3i *Rotation, Vector3i *Position, bool RotXYZ, SDWORD scale)
+void displayComponentButton(BASE_STATS *Stat, const Vector3i *Rotation, const Vector3i *Position, int scale)
 {
 	iIMDShape *ComponentIMD = NULL;
 	iIMDShape *MountIMD = NULL;
@@ -402,7 +289,7 @@ void displayComponentButton(BASE_STATS *Stat, Vector3i *Rotation, Vector3i *Posi
 	{
 		return;
 	}
-	setMatrix(Position, Rotation, RotXYZ, scale);
+	setMatrix(Position, Rotation, scale);
 
 	/* VTOL bombs are only stats allowed to have NULL ComponentIMD */
 	if (StatIsComponent(Stat) != COMP_WEAPON
@@ -433,7 +320,7 @@ void displayComponentButton(BASE_STATS *Stat, Vector3i *Rotation, Vector3i *Posi
 
 // Render a research item given a BASE_STATS structure.
 //
-void displayResearchButton(BASE_STATS *Stat, Vector3i *Rotation, Vector3i *Position, bool RotXYZ, SDWORD scale)
+void displayResearchButton(BASE_STATS *Stat, const Vector3i *Rotation, const Vector3i *Position, int scale)
 {
 	iIMDShape *ResearchIMD = ((RESEARCH *)Stat)->pIMD;
 	iIMDShape *MountIMD = ((RESEARCH *)Stat)->pIMD2;
@@ -441,7 +328,7 @@ void displayResearchButton(BASE_STATS *Stat, Vector3i *Rotation, Vector3i *Posit
 	ASSERT(ResearchIMD, "ResearchIMD is NULL");
 	if (ResearchIMD)
 	{
-		setMatrix(Position, Rotation, RotXYZ, scale);
+		setMatrix(Position, Rotation, scale);
 
 		if (MountIMD)
 		{
@@ -468,16 +355,55 @@ static inline iIMDShape *getRightPropulsionIMD(DROID *psDroid)
 	return asBodyStats[bodyStat].ppIMDList[propStat * NUM_PROP_SIDES + RIGHT_PROP];
 }
 
+void drawMuzzleFlash(WEAPON sWeap, iIMDShape *weaponImd, iIMDShape *flashImd, PIELIGHT buildingBrightness, int pieFlag, int iPieData, UBYTE colour)
+{
+	if (!weaponImd || !flashImd || !weaponImd->nconnectors || graphicsTime < sWeap.lastFired)
+	{
+		return;
+	}
+
+	int connector_num = 0;
+
+	// which barrel is firing if model have multiple muzzle connectors?
+	if (sWeap.shotsFired && (weaponImd->nconnectors > 1))
+	{
+		// shoot first, draw later - substract one shot to get correct results
+		connector_num = (sWeap.shotsFired - 1) % (weaponImd->nconnectors);
+	}
+
+	/* Now we need to move to the end of the firing barrel */
+	pie_TRANSLATE(weaponImd->connectors[connector_num].x,
+		      weaponImd->connectors[connector_num].z,
+		      weaponImd->connectors[connector_num].y);
+
+	// assume no clan colours for muzzle effects
+	if (flashImd->numFrames == 0 || flashImd->animInterval <= 0)
+	{
+		// no anim so display one frame for a fixed time
+		if (graphicsTime >= sWeap.lastFired && graphicsTime < sWeap.lastFired + BASE_MUZZLE_FLASH_DURATION)
+		{
+			pie_Draw3DShape(flashImd, 0, colour, buildingBrightness, pieFlag | pie_ADDITIVE, EFFECT_MUZZLE_ADDITIVE);
+		}
+	}
+	else if (graphicsTime >= sWeap.lastFired)
+	{
+		// animated muzzle
+		int frame = (graphicsTime - sWeap.lastFired) / flashImd->animInterval;
+		if (frame < flashImd->numFrames)
+		{
+			pie_Draw3DShape(flashImd, frame, colour, buildingBrightness, pieFlag | pie_ADDITIVE, EFFECT_MUZZLE_ADDITIVE);
+		}
+	}
+}
 
 /* Assumes matrix context is already set */
 // this is able to handle multiple weapon graphics now
 // removed mountRotation,they get such stuff from psObj directly now
 static void displayCompObj(DROID *psDroid, bool bButton)
 {
-	iIMDShape               *psShape, *psJet, *psShapeTemp = NULL, *psMountShape;
+	iIMDShape               *psShape, *psMoveAnim, *psStillAnim, *psShapeTemp = NULL, *psMountShape;
 	SDWORD				iConnector;
 	PROPULSION_STATS	*psPropStats;
-	SDWORD				frame;
 	SDWORD				pieFlag, iPieData;
 	PIELIGHT			brightness;
 	UDWORD				colour;
@@ -507,7 +433,7 @@ static void displayCompObj(DROID *psDroid, bool bButton)
 		pieFlag = pie_SHADOW;
 		brightness = pal_SetBrightness(psDroid->illumination);
 		// NOTE: Beware of transporters that are offscreen, on a mission!  We should *not* be checking tiles at this point in time!
-		if (psDroid->droidType != DROID_TRANSPORTER && !missionIsOffworld())
+		if (!isTransporter(psDroid) && !missionIsOffworld())
 		{
 			MAPTILE *psTile = worldTile(psDroid->pos.x, psDroid->pos.y);
 			if (psTile->jammerBits & alliancebits[psDroid->player])
@@ -583,14 +509,16 @@ static void displayCompObj(DROID *psDroid, bool bButton)
 		}
 	}
 
-	/* render vtol jet if flying - horrible hack - GJ */
-	if (!bButton && psPropStats->propulsionType == PROPULSION_TYPE_LIFT && !cyborgDroid(psDroid) && psDroid->sMove.Status != MOVEINACTIVE)
+	/* Render animation effects based on movement or lack thereof, if any */
+	psMoveAnim = asBodyStats[psDroid->asBits[COMP_BODY]].ppMoveIMDList[psDroid->asBits[COMP_PROPULSION]];
+	psStillAnim = asBodyStats[psDroid->asBits[COMP_BODY]].ppStillIMDList[psDroid->asBits[COMP_PROPULSION]];
+	if (!bButton && psMoveAnim && psDroid->sMove.Status != MOVEINACTIVE)
 	{
-		psJet = asBodyStats[psDroid->asBits[COMP_BODY]].pFlameIMD;
-		if (psJet)
-		{
-			pie_Draw3DShape(psJet, getModularScaledGraphicsTime(psJet->animInterval, psJet->numFrames), colour, brightness, pie_ADDITIVE, 200);
-		}
+		pie_Draw3DShape(psMoveAnim, getModularScaledGraphicsTime(psMoveAnim->animInterval, psMoveAnim->numFrames), colour, brightness, pie_ADDITIVE, 200);
+	}
+	else if (!bButton && psStillAnim) // standing still
+	{
+		pie_Draw3DShape(psStillAnim, getModularScaledGraphicsTime(psStillAnim->animInterval, psStillAnim->numFrames), colour, brightness, 0, 0);
 	}
 
 	//don't change the screen coords of an object if drawing it in a button
@@ -716,48 +644,7 @@ static void displayCompObj(DROID *psDroid, bool bButton)
 					if (psShape)
 					{
 						pie_Draw3DShape(psShape, 0, colour, brightness, pieFlag, iPieData);
-
-						if (psShape->nconnectors)
-						{
-							unsigned int connector_num = 0;
-
-							// which barrel is firing if model have multiple muzzle connectors?
-							if (psDroid->asWeaps[i].shotsFired && (psShape->nconnectors > 1))
-							{
-								// shoot first, draw later - substract one shot to get correct results
-								connector_num = (psDroid->asWeaps[i].shotsFired - 1) % (psShape->nconnectors);
-							}
-
-							/* Now we need to move to the end of the firing barrel (there maybe multiple barrels) */
-							pie_TRANSLATE(psShape->connectors[connector_num].x,
-							              psShape->connectors[connector_num].z,
-							              psShape->connectors[connector_num].y);
-
-							//and draw the muzzle flash
-							psShape = MUZZLE_FLASH_PIE(psDroid, i);
-
-							if (psShape && graphicsTime >= psDroid->asWeaps[i].lastFired)
-							{
-								//assume no clan colours for muzzle effects
-								if ((psShape->numFrames == 0) || (psShape->animInterval <= 0))
-								{
-									//no anim so display one frame for a fixed time
-									if (graphicsTime < psDroid->asWeaps[i].lastFired + BASE_MUZZLE_FLASH_DURATION)
-									{
-										pie_Draw3DShape(psShape, 0, 0, brightness, pieFlag | pie_ADDITIVE, EFFECT_MUZZLE_ADDITIVE);
-									}
-								}
-								else
-								{
-									// animated muzzle
-									frame = (graphicsTime - psDroid->asWeaps[i].lastFired) / psShape->animInterval;
-									if (frame < psShape->numFrames)
-									{
-										pie_Draw3DShape(psShape, frame, 0, brightness, pieFlag | pie_ADDITIVE, EFFECT_MUZZLE_ADDITIVE);
-									}
-								}
-							}
-						}
+						drawMuzzleFlash(psDroid->asWeaps[i], psShape, MUZZLE_FLASH_PIE(psDroid, i), brightness, pieFlag, iPieData);
 					}
 					/* Pop Matrix */
 					pie_MatEnd();
@@ -901,9 +788,9 @@ static void displayCompObj(DROID *psDroid, bool bButton)
 
 // Render a composite droid given a DROID_TEMPLATE structure.
 //
-void displayComponentButtonTemplate(DROID_TEMPLATE *psTemplate, Vector3i *Rotation, Vector3i *Position, bool RotXYZ, SDWORD scale)
+void displayComponentButtonTemplate(DROID_TEMPLATE *psTemplate, const Vector3i *Rotation, const Vector3i *Position, int scale)
 {
-	setMatrix(Position, Rotation, RotXYZ, scale);
+	setMatrix(Position, Rotation, scale);
 
 	// Decide how to sort it.
 	leftFirst = angleDelta(DEG(Rotation->y)) < 0;
@@ -924,11 +811,11 @@ void displayComponentButtonTemplate(DROID_TEMPLATE *psTemplate, Vector3i *Rotati
 
 // Render a composite droid given a DROID structure.
 //
-void displayComponentButtonObject(DROID *psDroid, Vector3i *Rotation, Vector3i *Position, bool RotXYZ, SDWORD scale)
+void displayComponentButtonObject(DROID *psDroid, const Vector3i *Rotation, const Vector3i *Position, int scale)
 {
 	SDWORD		difference;
 
-	setMatrix(Position, Rotation, RotXYZ, scale);
+	setMatrix(Position, Rotation, scale);
 
 	// Decide how to sort it.
 	difference = Rotation->y % 360;
@@ -960,7 +847,7 @@ void displayComponentObject(DROID *psDroid)
 	position.z = -(st.pos.y - player.p.z);
 	position.y = st.pos.z;
 
-	if (psDroid->droidType == DROID_TRANSPORTER || psDroid->droidType == DROID_SUPERTRANSPORTER)
+	if (isTransporter(psDroid))
 	{
 		position.y += bobTransporterHeight();
 	}

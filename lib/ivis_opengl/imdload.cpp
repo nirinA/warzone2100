@@ -24,15 +24,148 @@
  * Load IMD (.pie) files
  */
 
+#include <QtCore/QMap>
+#include <QtCore/QString>
+
 #include "lib/framework/frame.h"
 #include "lib/framework/string_ext.h"
 #include "lib/framework/frameresource.h"
 #include "lib/framework/fixedpoint.h"
+#include "lib/framework/file.h"
+#include "lib/framework/physfs_ext.h"
 #include "lib/ivis_opengl/piematrix.h"
+#include "lib/ivis_opengl/piestate.h"
 
 #include "ivisdef.h" // for imd structures
 #include "imd.h" // for imd structures
 #include "tex.h" // texture page loading
+
+typedef QMap<QString, iIMDShape *> MODELMAP;
+static MODELMAP models;
+
+iIMDShape *iV_ProcessIMD(const char **ppFileData, const char *FileDataEnd);
+
+iIMDShape::iIMDShape()
+{
+	flags = 0;
+	nconnectors = 0; // Default number of connectors must be 0
+	npoints = 0;
+	npolys = 0;
+	points = NULL;
+	polys = NULL;
+	connectors = NULL;
+	next = NULL;
+	shadowEdgeList = NULL;
+	nShadowEdges = 0;
+	texpage = iV_TEX_INVALID;
+	tcmaskpage = iV_TEX_INVALID;
+	normalpage = iV_TEX_INVALID;
+	specularpage = iV_TEX_INVALID;
+	numFrames = 0;
+	shaderProgram = 0;
+}
+
+static void iV_IMDRelease(iIMDShape *s)
+{
+	unsigned int i;
+	iIMDShape *d;
+
+	if (s)
+	{
+		if (s->points)
+		{
+			free(s->points);
+		}
+		if (s->connectors)
+		{
+			free(s->connectors);
+		}
+		if (s->polys)
+		{
+			for (i = 0; i < s->npolys; i++)
+			{
+				if (s->polys[i].texCoord)
+				{
+					free(s->polys[i].texCoord);
+				}
+			}
+			free(s->polys);
+		}
+		if (s->shadowEdgeList)
+		{
+			free(s->shadowEdgeList);
+			s->shadowEdgeList = NULL;
+		}
+		glDeleteBuffers(VBO_COUNT, s->buffers);
+		// shader deleted later, if any
+		d = s->next;
+		delete s;
+		iV_IMDRelease(d);
+	}
+}
+
+void modelShutdown()
+{
+	for (MODELMAP::iterator i = models.begin(); i != models.end(); i = models.erase(i))
+	{
+		iV_IMDRelease(i.value());
+	}
+	models.clear();
+}
+
+static bool tryLoad(const QString &path, const QString &filename)
+{
+	if (PHYSFS_exists(path + filename))
+	{
+		char *pFileData = NULL, *fileEnd;
+		UDWORD size = 0;
+		if (!loadFile(QString(path + filename).toUtf8().constData(), &pFileData, &size))
+		{
+			debug(LOG_ERROR, "Failed to load model file: %s", QString(path + filename).toUtf8().constData());
+			return false;
+		}
+		fileEnd = pFileData + size;
+		iIMDShape *s = iV_ProcessIMD((const char **)&pFileData, fileEnd);
+		if (s)
+		{
+			models.insert(filename, s);
+		}
+		return true;
+	}
+	return false;
+}
+
+const QString &modelName(iIMDShape *model)
+{
+	for (MODELMAP::iterator i = models.begin(); i != models.end(); ++i)
+	{
+		if (i.value() == model)
+		{
+			return i.key();
+		}
+	}
+	ASSERT(false, "An IMD pointer could not be backtraced to a filename!");
+	static QString error;
+	return error;
+}
+
+iIMDShape *modelGet(const QString &filename)
+{
+	QString name(filename.toLower());
+	if (models.contains(name))
+	{
+		return models[name]; // cached
+	}
+	else if (tryLoad("structs/", name) || tryLoad("misc/", name) || tryLoad("effects/", name)
+		 || tryLoad("components/prop/", name) || tryLoad("components/weapons/", name)
+		 || tryLoad("components/bodies/", name) || tryLoad("features/", name)
+		 || tryLoad("misc/micnum/", name) || tryLoad("misc/minum/", name) || tryLoad("misc/mivnum/", name) || tryLoad("misc/researchimds/", name))
+	{
+		return models[name];
+	}
+	debug(LOG_ERROR, "Could not find: %s", name.toUtf8().constData());
+	return NULL;
+}
 
 static bool AtEndOfFile(const char *CurPos, const char *EndOfFile)
 {
@@ -64,7 +197,7 @@ static bool AtEndOfFile(const char *CurPos, const char *EndOfFile)
  * \post s->polys allocated (iFSDPoly * s->npolys)
  * \post s->pindex allocated for each poly
  */
-static bool _imd_load_polys( const char **ppFileData, iIMDShape *s, int pieVersion)
+static bool _imd_load_polys(const char **ppFileData, iIMDShape *s, int pieVersion)
 {
 	const char *pFileData = *ppFileData;
 	unsigned int i, j;
@@ -220,7 +353,7 @@ static bool _imd_load_polys( const char **ppFileData, iIMDShape *s, int pieVersi
 }
 
 
-static bool ReadPoints( const char **ppFileData, iIMDShape *s )
+static bool ReadPoints(const char **ppFileData, iIMDShape *s)
 {
 	const char *pFileData = *ppFileData;
 	unsigned int i;
@@ -420,7 +553,7 @@ void _imd_calc_bounds(iIMDShape *s, Vector3f *p, int size)
 // END: tight bounding sphere
 }
 
-static bool _imd_load_points( const char **ppFileData, iIMDShape *s )
+static bool _imd_load_points(const char **ppFileData, iIMDShape *s)
 {
 	//load the points then pass through a second time to setup bounding datavalues
 	s->points = (Vector3f*)malloc(sizeof(Vector3f) * s->npoints);
@@ -534,27 +667,26 @@ static iIMDShape *_imd_load_level(const char **ppFileData, const char *FileDataE
 	char buffer[PATH_MAX] = {'\0'};
 	int cnt = 0, n = 0, i;
 	iIMDShape *s = NULL;
+	float dummy;
 
 	if (nlevels == 0)
 	{
 		return NULL;
 	}
 
-	// Load optional MATERIALS directive
 	pTmp = pFileData;	// remember position
 	i = sscanf(pFileData, "%255s %n", buffer, &cnt);
 	ASSERT_OR_RETURN(NULL, i == 1, "Bad directive following LEVEL");
 
 	s = new iIMDShape;
 
+	// Optionally load and ignore deprecated MATERIALS directive
 	if (strcmp(buffer, "MATERIALS") == 0)
 	{
-		i = sscanf(pFileData, "%255s %f %f %f %f %f %f %f %f %f %f%n", buffer,
-		           &s->material[LIGHT_AMBIENT][0], &s->material[LIGHT_AMBIENT][1], &s->material[LIGHT_AMBIENT][2],
-		           &s->material[LIGHT_DIFFUSE][0], &s->material[LIGHT_DIFFUSE][1], &s->material[LIGHT_DIFFUSE][2],
-	                   &s->material[LIGHT_SPECULAR][0], &s->material[LIGHT_SPECULAR][1], &s->material[LIGHT_SPECULAR][2],
-		           &s->shininess, &cnt);
+		i = sscanf(pFileData, "%255s %f %f %f %f %f %f %f %f %f %f%n", buffer, &dummy, &dummy, &dummy, &dummy, 
+		           &dummy, &dummy, &dummy, &dummy, &dummy, &dummy, &cnt);
 		ASSERT_OR_RETURN(NULL, i == 11, "Bad MATERIALS directive");
+		debug(LOG_WARNING, "MATERIALS directive no longer supported!");
 		pFileData += cnt;
 	}
 	else // use defaults
@@ -652,7 +784,6 @@ static iIMDShape *_imd_load_level(const char **ppFileData, const char *FileDataE
 	return s;
 }
 
-
 /*!
  * Load ppFileData into a shape
  * \param ppFileData Data from the IMD file
@@ -660,19 +791,21 @@ static iIMDShape *_imd_load_level(const char **ppFileData, const char *FileDataE
  * \return The shape, constructed from the data read
  */
 // ppFileData is incremented to the end of the file on exit!
-iIMDShape *iV_ProcessIMD( const char **ppFileData, const char *FileDataEnd )
+iIMDShape *iV_ProcessIMD(const char **ppFileData, const char *FileDataEnd)
 {
 	const char *pFileName = GetLastResourceFilename(); // Last loaded filename
 	const char *pFileData = *ppFileData;
-	char buffer[PATH_MAX], texfile[PATH_MAX], normalfile[PATH_MAX];
+	char buffer[PATH_MAX], texfile[PATH_MAX], normalfile[PATH_MAX], specfile[PATH_MAX];
 	int cnt, nlevels;
 	iIMDShape *shape, *psShape;
 	UDWORD level;
 	int32_t imd_version;
 	uint32_t imd_flags;
 	bool bTextured = false;
+	GLuint shader = 0;
 
 	memset(normalfile, 0, sizeof(normalfile));
+	memset(specfile, 0, sizeof(specfile));
 
 	if (sscanf(pFileData, "%255s %d%n", buffer, &imd_version, &cnt) != 2)
 	{
@@ -790,7 +923,69 @@ iIMDShape *iV_ProcessIMD( const char **ppFileData, const char *FileDataEnd )
 		}
 		sstrcat(normalfile, ".png");
 
-		/* -Now- read in LEVELS directive */
+		/* Now read in LEVELS directive */
+		if (sscanf(pFileData, "%255s %d%n", buffer, &nlevels, &cnt) != 2)
+		{
+			debug(LOG_ERROR, "iV_ProcessIMD %s bad levels info: %s", pFileName, buffer);
+			return NULL;
+		}
+		pFileData += cnt;
+	}
+
+	if (strncmp(buffer, "SPECULARMAP", 11) == 0)
+	{
+		char ch, texType[PATH_MAX];
+		int i;
+
+		/* the first parameter for textures is always ignored; which is why we ignore nlevels read in above */
+		ch = *pFileData++;
+
+		// Run up to the dot or till the buffer is filled. Leave room for the extension.
+		for (i = 0; i < PATH_MAX-5 && (ch = *pFileData++) != '\0' && ch != '.'; ++i)
+		{
+ 			specfile[i] = ch;
+		}
+		specfile[i] = '\0';
+
+		if (sscanf(pFileData, "%255s%n", texType, &cnt) != 1)
+		{
+			debug(LOG_ERROR, "%s specular map info corrupt: %s", pFileName, buffer);
+			return NULL;
+		}
+		pFileData += cnt;
+
+		if (strcmp(texType, "png") != 0)
+		{
+			debug(LOG_ERROR, "%s: only png specular maps supported", pFileName);
+			return NULL;
+		}
+		sstrcat(specfile, ".png");
+
+		/* Try -again- to read in LEVELS directive */
+		if (sscanf(pFileData, "%255s %d%n", buffer, &nlevels, &cnt) != 2)
+		{
+			debug(LOG_ERROR, "iV_ProcessIMD %s bad levels info: %s", pFileName, buffer);
+			return NULL;
+		}
+		pFileData += cnt;
+	}
+
+	if (strncmp(buffer, "SHADERS", 7) == 0)
+	{
+		char vertex[PATH_MAX], fragment[PATH_MAX];
+
+		/* the first parameter for "textures" is always ignored; which is why we ignore nlevels read in above */
+		pFileData++;
+
+		if (sscanf(pFileData, "%255s %255s%n", vertex, fragment, &cnt) != 2)
+		{
+			debug(LOG_ERROR, "%s shader corrupt: %s", pFileName, buffer);
+			return NULL;
+		}
+		pFileData += cnt;
+		shader = pie_LoadShader(pFileName, vertex, fragment);
+
+		/* Try -yet again- to read in LEVELS directive */
 		if (sscanf(pFileData, "%255s %d%n", buffer, &nlevels, &cnt) != 2)
 		{
 			debug(LOG_ERROR, "iV_ProcessIMD %s bad levels info: %s", pFileName, buffer);
@@ -826,25 +1021,37 @@ iIMDShape *iV_ProcessIMD( const char **ppFileData, const char *FileDataEnd )
 		return NULL;
 	}
 
+	shape->shaderProgram = shader;
+
 	// load texture page if specified
 	if (bTextured)
 	{
 		int texpage = iV_GetTexture(texfile);
 		int normalpage = iV_TEX_INVALID;
+		int specpage = iV_TEX_INVALID;
+
+		ASSERT_OR_RETURN(NULL, texpage >= 0, "%s could not load tex page %s", pFileName, texfile);
 
 		if (normalfile[0] != '\0')
 		{
-			debug(LOG_WARNING, "Loading normal map %s for %s", normalfile, pFileName);
+			debug(LOG_TEXTURE, "Loading normal map %s for %s", normalfile, pFileName);
 			normalpage = iV_GetTexture(normalfile);
+			ASSERT_OR_RETURN(NULL, normalpage >= 0, "%s could not load tex page %s", pFileName, normalfile);
 		}
 
-		ASSERT_OR_RETURN(NULL, texpage >= 0, "%s could not load tex page %s", pFileName, texfile);
+		if (specfile[0] != '\0')
+		{
+			debug(LOG_TEXTURE, "Loading specular map %s for %s", specfile, pFileName);
+			specpage = iV_GetTexture(specfile);
+			ASSERT_OR_RETURN(NULL, specpage >= 0, "%s could not load tex page %s", pFileName, specfile);
+		}
 
 		// assign tex pages and flags to all levels
 		for (psShape = shape; psShape != NULL; psShape = psShape->next)
 		{
 			psShape->texpage = texpage;
 			psShape->normalpage = normalpage;
+			psShape->specularpage = specpage;
 			psShape->flags = imd_flags;
 		}
 

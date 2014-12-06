@@ -22,7 +22,6 @@
  */
 
 #include "lib/framework/frame.h"
-#include "lib/framework/frameint.h"
 #include "lib/framework/opengl.h"
 
 #include "lib/gamelib/gtime.h"
@@ -135,8 +134,6 @@ void pie_Skybox_Shutdown()
 
 void pie_DrawSkybox(float scale)
 {
-	GL_DEBUG("Drawing skybox");
-
 	glPushAttrib(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT | GL_ENABLE_BIT | GL_FOG_BIT);
 	// no use in updating the depth buffer
 	glDepthMask(GL_FALSE);
@@ -149,9 +146,6 @@ void pie_DrawSkybox(float scale)
 
 	// enable alpha
 	pie_SetRendMode(REND_ALPHA);
-
-	// for the nice blend of the sky with the fog
-	glDisable(GL_ALPHA_TEST);
 
 	// Apply scale matrix
 	glScalef(scale, scale/2.0f, scale);

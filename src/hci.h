@@ -165,13 +165,6 @@
 #define UNPACKDWORD_TRI_B(a) ( ((a)>>10) & 0x3ff )
 #define UNPACKDWORD_TRI_C(a) ( (a) & 0x3ff)
 
-// 4 8 bit values packed into a DWORD.
-#define PACKDWORD_QUAD(a,b,c,d) ( (((a) & 0xff) << 24) | (((b) & 0xff) << 16) | (((c) & 0xff) << 8) | ((d) & 0xff)  )
-#define UNPACKDWORD_QUAD_A(a) ( ((a)>>24) & 0xff )
-#define UNPACKDWORD_QUAD_B(a) ( ((a)>>16) & 0xff )
-#define UNPACKDWORD_QUAD_C(a) ( ((a)>>8) & 0xff )
-#define UNPACKDWORD_QUAD_D(a) ( (a) & 0xff)
-
 #define POWERPOINTS_DROIDDIV	5
 
 #define OBJ_BUTWIDTH		60		// Button width.
@@ -270,8 +263,10 @@ extern INT_RETVAL intRunWidgets(void);
 extern void intDisplayWidgets(void);
 
 /* Add the reticule widgets to the widget screen */
-extern bool intAddReticule(void);
-extern void intRemoveReticule(void);
+bool intAddReticule();
+bool intAddPower();
+void intRemoveReticule();
+void setReticuleStats(int ButId, QString tip, QString filename, QString filenameDown);
 
 /* Set the map view point to the world coordinates x,y */
 extern void intSetMapPos(UDWORD x, UDWORD y);
@@ -338,10 +333,9 @@ extern void flashReticuleButton(UDWORD buttonID);
 extern void stopReticuleButtonFlash(UDWORD buttonID);
 
 //toggles the Power Bar display on and off
-extern void togglePowerBar(void);
-
-//displays the Power Bar
-extern void intShowPowerBar(void);
+void togglePowerBar();
+void intShowPowerBar();
+void intHidePowerBar();
 
 //hides the power bar from the display - regardless of what player requested!
 extern void forceHidePowerBar(void);

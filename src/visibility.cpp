@@ -42,10 +42,9 @@
 #include "scriptextern.h"
 #include "structure.h"
 #include "projectile.h"
-
 #include "display.h"
 #include "multiplay.h"
-
+#include "qtscript.h"
 #include "wavecast.h"
 
 // rate to change visibility level
@@ -329,7 +328,7 @@ static void doWaveTerrain(const BASE_OBJECT *psObj, TILEPOS *recordTilePos, int 
 /* Remove tile visibility from object */
 void visRemoveVisibility(BASE_OBJECT *psObj)
 {
-	if (psObj->watchedTiles && psObj->numWatchedTiles > 0 && mapWidth && mapHeight)
+	if (psObj->watchedTiles && mapWidth && mapHeight)
 	{
 		for (int i = 0; i < psObj->numWatchedTiles; i++)
 		{
@@ -338,24 +337,13 @@ void visRemoveVisibility(BASE_OBJECT *psObj)
 			MAPTILE *psTile = mapTile(pos.x, pos.y);
 
 			ASSERT(pos.type < 2, "Invalid visibility type %d", (int)pos.type);
-			if (pos.type == 1)
+			uint8_t *visionType = (pos.type == 0) ? psTile->sensors : psTile->watchers;
+			if (visionType[psObj->player] == 0 && game.type == CAMPAIGN)	// hack
 			{
-				if (psTile->watchers[psObj->player] == 0 && game.type == CAMPAIGN)	// hack
-				{
-					continue;
-				}
-				ASSERT(psTile->watchers[psObj->player] > 0, "Not watching watched tile (%d, %d)", (int)pos.x, (int)pos.y);
-				psTile->watchers[psObj->player]--;
+				continue;
 			}
-			else
-			{
-				if (psTile->sensors[psObj->player] == 0 && game.type == CAMPAIGN)	// hack
-				{
-					continue;
-				}
-				ASSERT(psTile->sensors[psObj->player] > 0, "No sensor on tile (%d, %d)", (int)pos.x, (int)pos.y);
-				psTile->sensors[psObj->player]--;
-			}
+			ASSERT(visionType[psObj->player] > 0, "No %s on watched tile (%d, %d)", pos.type ? "radar" : "vision", (int)pos.x, (int)pos.y);
+			visionType[psObj->player]--;
 			if (objJammerPower(psObj) > 0)                  // we are a jammer object
 			{
 				// No jammers in campaign, no need for special hack
@@ -368,10 +356,10 @@ void visRemoveVisibility(BASE_OBJECT *psObj)
 			}
 			updateTileVis(psTile);
 		}
-		free(psObj->watchedTiles);
-		psObj->watchedTiles = NULL;
-		psObj->numWatchedTiles = 0;
 	}
+	free(psObj->watchedTiles);
+	psObj->watchedTiles = NULL;
+	psObj->numWatchedTiles = 0;
 }
 
 void visRemoveVisibilityOffWorld(BASE_OBJECT *psObj)
@@ -671,7 +659,10 @@ static void processVisibilityVision(BASE_OBJECT *psViewer)
 			// Tell system that this side can see this object
 			setSeenBy(psObj, psViewer->player, val);
 
-			// This looks like some kind of weird hack.
+			// Check if scripting system wants to trigger an event for this
+			triggerEventSeen(psViewer, psObj);
+
+			// This looks like some kind of weird hack. Only used by wzscript.
 			if(psObj->type != OBJ_FEATURE && psObj->visible[psViewer->player] <= 0)
 			{
 				// features are not in the cluster system
@@ -872,6 +863,7 @@ bool lineOfFire(const SIMPLE_OBJECT* psViewer, const BASE_OBJECT* psTarget, int 
 
 	ASSERT_OR_RETURN(false, psViewer != NULL, "Invalid shooter pointer!");
 	ASSERT_OR_RETURN(false, psTarget != NULL, "Invalid target pointer!");
+	ASSERT_OR_RETURN(false, psViewer->type == OBJ_DROID || psViewer->type == OBJ_STRUCTURE, "Bad viewer type");
 
 	if (psViewer->type == OBJ_DROID)
 	{

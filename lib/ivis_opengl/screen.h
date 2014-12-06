@@ -38,13 +38,13 @@
 
 /* ------------------------------------------------------------------------------------------- */
 
-/* Legacy stuff
- * - only used in the sequence video code we have not yet decided whether to port or to junk */
 
-/* Set the colour for text */
-extern void screenSetTextColour(UBYTE red, UBYTE green, UBYTE blue);
+extern unsigned screenWidth;
+extern unsigned screenHeight;
 
 /* backDrop */
+void screen_SetRandomBackdrop( const char* dirname, 
+			       const char* basename );
 extern void screen_SetBackDropFromFile(const char* filename);
 extern void screen_StopBackDrop(void);
 extern void screen_RestartBackDrop(void);
@@ -53,7 +53,7 @@ extern void screen_Upload(const char *newBackDropBmp);
 void screen_Display();
 
 /* screendump */
-extern void screenDumpToDisk(const char* path);
+void screenDumpToDisk(const char *path, const char *level);
 
 extern int wz_texture_compression;
 
@@ -61,7 +61,38 @@ extern void screenDoDumpToDiskIfRequired(void);
 
 void screen_enableMapPreview(int width, int height, Vector2i *playerpositions);
 void screen_disableMapPreview(void);
-void screen_EnableMissingFunctions();
+
+/// gaphics performance measurement points
+enum PERF_POINT
+{
+	PERF_START_FRAME,
+	PERF_EFFECTS,
+	PERF_TERRAIN,
+	PERF_SKYBOX,
+	PERF_MODEL_INIT,
+	PERF_PARTICLES,
+	PERF_WATER,
+	PERF_MODELS,
+	PERF_MISC,
+	PERF_GUI,
+	PERF_COUNT
+};
+
+bool screenInitialise();
+void screenShutDown();
+
+void wzPerfBegin(PERF_POINT pp, const char *descr);
+void wzPerfEnd(PERF_POINT pp);
+void wzPerfStart();
+void wzPerfShutdown();
+void wzPerfFrame();
+/// Are performance measurements available?
+bool wzPerfAvailable();
+
+#define wzSceneBegin(x) (WZ_ASSERT_STATIC_STRING(x), _wzSceneBegin(x))
+void _wzSceneBegin(const char *descr);
+#define wzSceneEnd(x) (WZ_ASSERT_STATIC_STRING(x), _wzSceneEnd(x))
+void _wzSceneEnd(const char *descr);
 
 struct OPENGL_DATA
 {

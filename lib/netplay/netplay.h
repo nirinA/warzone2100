@@ -104,6 +104,7 @@ enum MESSAGE_TYPES
 	GAME_GAME_TIME,                 ///< Game time. Used for synchronising, so that all messages are executed at the same gameTime on all clients.
 	GAME_PLAYER_LEFT,               ///< Player has left or dropped.
 	GAME_DROIDDISEMBARK,            ///< droid disembarked from a Transporter
+	GAME_SYNC_REQUEST,		///< Game event generated from scripts that is meant to be synced
 	// The following messages are used for debug mode.
 	GAME_DEBUG_MODE,                ///< Request enable/disable debug mode.
 	GAME_DEBUG_ADD_DROID,           ///< Add droid.
@@ -167,7 +168,7 @@ struct GAMESTRUCT
 	uint32_t	game_version_major;				// 
 	uint32_t	game_version_minor;				// 
 	uint32_t	privateGame;					// if true, it is a private game
-	uint32_t	pureGame;						// NO mods allowed if true
+	uint32_t	pureMap;						// If this map has mods in it.
 	uint32_t	Mods;							// number of concatenated mods?
 	// Game ID, used on the lobby server to link games with multiple address families to eachother
 	uint32_t	gameId;
@@ -255,7 +256,9 @@ struct NETPLAY
 	uint32_t	hostPlayer;		///< Index of host in player array
 	uint32_t	bComms;			///< Actually do the comms?
 	bool		isHost;			///< True if we are hosting the game
-	bool		isUPNP;					// if we want the UPnP detection routines to run
+	bool		isUPNP;				// if we want the UPnP detection routines to run
+	bool		isUPNP_CONFIGURED;	// if UPnP was successful
+	bool		isUPNP_ERROR;		//If we had a error during detection/config process
 	bool		isHostAlive;	/// if the host is still alive
 	PHYSFS_file *   pMapFileHandle;         ///< Only non-NULL during map download.
 	char mapFileName[255];            ///< Only valid during map download.

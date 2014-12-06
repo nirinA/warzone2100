@@ -36,6 +36,9 @@ dist_doc_DATA = \
 
 ACLOCAL_AMFLAGS = -I m4
 
+# ignore the autorevision.cache file on make distcheck
+distcleancheck_listfiles =  find . -type f -print | grep -v 'autorevision.cache'
+
 EXTRA_DIST= \
 	build_tools/autorevision \
 	autogen.sh \
@@ -62,6 +65,7 @@ javascript-doc-base:
 	grep $(top_srcdir)/src/qtscript.cpp -e '//--' | sed 's/\/\/--//' > doc/functions.tex
 	grep $(top_srcdir)/src/qtscriptfuncs.cpp -e '//--' | sed 's/\/\/--//' >> doc/functions.tex
 	grep $(top_srcdir)/src/qtscriptfuncs.cpp -e '//;;' | sed 's/\/\/;;//' > doc/objects.tex
+	grep $(top_srcdir)/data/base/script/campaign/libcampaign.js -e '//;;' | sed 's/\/\/;;//' > doc/campaign.tex
 	test $(abs_top_srcdir) = $(abs_top_builddir) || cp $(top_srcdir)/doc/javascript.tex doc/
 
 javascript-doc: javascript-doc-base

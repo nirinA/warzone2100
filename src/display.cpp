@@ -1410,7 +1410,7 @@ void finishDeliveryPosition()
 			setAssemblyPoint(psStruct->pFunctionality->factory.psAssemblyPoint,
 							 flagPos.coords.x, flagPos.coords.y, selectedPlayer, true);
 		}
-		else if (psStruct->pStructureType->type == REF_REPAIR_FACILITY)
+		else if (psStruct->pStructureType->type == REF_REPAIR_FACILITY && psStruct->pFunctionality != NULL)
 		{
 			setAssemblyPoint(psStruct->pFunctionality->repairFacility.psDeliveryPoint,
 							 flagPos.coords.x, flagPos.coords.y, selectedPlayer, true);
@@ -1651,7 +1651,7 @@ static void dealWithLMBDroid(DROID* psDroid, SELECTION_TYPE selection)
 		FeedbackOrderGiven();
 		driveDisableTactical();
 	}
-	else if (psDroid->droidType == DROID_TRANSPORTER || psDroid->droidType == DROID_SUPERTRANSPORTER)
+	else if (isTransporter(psDroid))
 	{
 		if (selection == SC_INVALID)
 		{
@@ -2198,7 +2198,7 @@ static void dealWithRMB( void )
 					dealWithDroidSelect(psDroid, false);
 				}
 				// Not a transporter
-				else if (psDroid->droidType != DROID_TRANSPORTER && psDroid->droidType != DROID_SUPERTRANSPORTER)
+				else if (!isTransporter(psDroid))
 				{
 					if (bRightClickOrders)
 					{
@@ -2412,7 +2412,7 @@ STRUCTURE	*psStructure;
 								retVal = MT_SENSOR;
 							}
 						}
-						else if ((psDroid->droidType == DROID_TRANSPORTER || psDroid->droidType == DROID_SUPERTRANSPORTER) &&
+						else if (isTransporter(psDroid) &&
 								 selectedPlayer == psDroid->player)
 						{
 							//check the transporter is not full
@@ -2614,8 +2614,8 @@ static SELECTION_TYPE	establishSelection(UDWORD selectedPlayer)
 			ASSERT( psDroid->droidType < NUM_DROID_WEIGHTS,
 				"establishSelection : droidType exceeds NUM_DROID_WEIGHTS" );
 
-			atLeastOne = true;
 			if(DroidSelectionWeights[psDroid->droidType] < CurrWeight) {
+				atLeastOne = true;
 				CurrWeight = DroidSelectionWeights[psDroid->droidType];
 				psDominant = psDroid;
 			}

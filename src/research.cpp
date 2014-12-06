@@ -25,6 +25,7 @@
  */
 #include <string.h>
 #include <map>
+#include <QtCore/QJsonArray>
 
 #include "lib/framework/frame.h"
 #include "lib/framework/strres.h"
@@ -129,7 +130,8 @@ bool loadResearch(QString filename)
 		ASSERT_OR_RETURN(false, checkResearchName(&research, inc), "Research name '%s' used already", getName(&research));
 
 		research.ref = REF_RESEARCH_START + inc;
-		research.resultStrings = ini.value("results").toStringList();
+
+		research.results = ini.json("results", QJsonArray());
 		
 		//set subGroup icon
 		QString subGroup = ini.value("subgroupIconID", "").toString();
@@ -179,38 +181,22 @@ bool loadResearch(QString filename)
 		if (statID.compare("") != 0)
 		{
 			//try find the structure stat with given name
-			int32_t structID = getStructStatFromName(statID.toUtf8().data());
-			if (structID >= 0)
-			{
-				research.psStat = (BASE_STATS *)(asStructureStats + structID);
-			}else
-			{
-				//try find the component stat with given name
-				research.psStat = getCompStatsFromName(statID);
-			}
-			ASSERT_OR_RETURN(false, research.psStat != NULL, "Cannot find the statID '%s' for Research '%s'", statID.toUtf8().data(), getName(&research));
+			research.psStat = getCompStatsFromName(statID);
+			ASSERT_OR_RETURN(false, research.psStat, "Could not find stats for %s research %s", statID.toUtf8().constData(), getName(&research));
 		}
 
 		QString imdName = ini.value("imdName", "").toString();
 		if (imdName.compare("") != 0)
 		{
-			research.pIMD = (iIMDShape *) resGetData("IMD", imdName.toUtf8().data());
+			research.pIMD = modelGet(imdName);
 			ASSERT(research.pIMD != NULL, "Cannot find the research PIE '%s' for record '%s'",imdName.toUtf8().data(), getName(&research));
-		}
-		else
-		{
-			research.pIMD = NULL;
 		}
 
 		QString imdName2 = ini.value("imdName2", "").toString();
 		if (imdName2.compare("") != 0)
 		{
-			research.pIMD2 = (iIMDShape *) resGetData("IMD", imdName2.toUtf8().data());
+			research.pIMD2 = modelGet(imdName2);
 			ASSERT(research.pIMD2 != NULL, "Cannot find the 2nd research '%s' PIE for record '%s'",imdName2.toUtf8().data(), getName(&research));
-		}
-		else
-		{
-			research.pIMD2 = NULL;
 		}
 
 		QString msgName = ini.value("msgName", "").toString();
@@ -1226,7 +1212,7 @@ void replaceDroidComponent(DROID *pList, UDWORD oldType, UDWORD oldCompInc,
 	{
 		switchComponent(psDroid, oldType, oldCompInc, newCompInc);
 		// Need to replace the units inside the transporter
-		if (psDroid->droidType == DROID_TRANSPORTER || psDroid->droidType == DROID_SUPERTRANSPORTER)
+		if (isTransporter(psDroid))
 		{
 			replaceTransDroidComponents(psDroid, oldType, oldCompInc, newCompInc);
 		}
@@ -1239,7 +1225,7 @@ void replaceTransDroidComponents(DROID *psTransporter, UDWORD oldType,
 {
     DROID       *psCurr;
 
-    ASSERT ((psTransporter->droidType == DROID_TRANSPORTER || psTransporter->droidType == DROID_SUPERTRANSPORTER), "invalid unit type" );
+	ASSERT(isTransporter(psTransporter), "invalid unit type");
 
     for (psCurr = psTransporter->psGroup->psList; psCurr != NULL; psCurr =
         psCurr->psGrpNext)

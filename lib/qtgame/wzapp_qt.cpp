@@ -22,14 +22,14 @@
  *  Qt-related functions.
  */
 
-#include <QtGui/QImage>
-#include <QtGui/QBitmap>
-#include <QtGui/QPainter>
-#include <QtGui/QMouseEvent>
-#include <QtGui/QMessageBox>
-#include <QtGui/QIcon>
-#include <QtGui/QApplication>
-#include <QtGui/QClipboard>
+#include <QtWidgets/QImage>
+#include <QtWidgets/QBitmap>
+#include <QtWidgets/QPainter>
+#include <QtWidgets/QMouseEvent>
+#include <QtWidgets/QMessageBox>
+#include <QtWidgets/QIcon>
+#include <QtWidgets/QApplication>
+#include <QtWidgets/QClipboard>
 
 // Get platform defines before checking for them.
 // Qt headers MUST come before platform specific stuff!
@@ -105,8 +105,8 @@ static bool mouseInWindow = false;
 static CURSOR lastCursor = CURSOR_ARROW;
 static bool crashing = false;
 
-unsigned screenWidth = 0;   // Declared in frameint.h.
-unsigned screenHeight = 0;  // Declared in frameint.h.
+unsigned screenWidth = 0;   // Declared in screen.h
+unsigned screenHeight = 0;  // Declared in screen.h
 static void inputAddBuffer(UDWORD key, utf_32_char unicode);
 static int WZkeyToQtKey(int code);
 
@@ -239,8 +239,6 @@ void WzMainWindow::resizeGL(int width, int height)
 	glLoadIdentity();
 	glCullFace(GL_FRONT);
 	glEnable(GL_CULL_FACE);
-
-	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 }
 
 void WzMainWindow::paintGL()
@@ -758,6 +756,11 @@ void wzReleaseMouse()
 	WzMainWindow::instance()->freeMouse();
 }
 
+void wzDelay(unsigned int delay)
+{
+	//SDL_Delay(delay);
+}
+
 bool wzActiveWindow()
 {
 	return WzMainWindow::instance()->underMouse();
@@ -786,14 +789,6 @@ Vector2i mousePressPos_DEPRECATED(MOUSE_KEY_CODE code)
 Vector2i mouseReleasePos_DEPRECATED(MOUSE_KEY_CODE code)
 {
 	return aMouseState[code].releasePos;
-}
-
-void setMousePos(uint16_t x, uint16_t y)
-{
-	if (getMouseWarp())
-	{
-		WzMainWindow::instance()->cursor().setPos(x, y);
-	}
 }
 
 /* This returns true if the mouse key is currently depressed */

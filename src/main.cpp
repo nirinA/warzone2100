@@ -24,8 +24,8 @@
 // Get platform defines before checking for them!
 #include "lib/framework/wzapp.h"
 #include <QtCore/QTextCodec>
-#include <QtGui/QApplication>
-#include <QtGui/QMessageBox>
+#include <QtWidgets/QApplication>
+#include <QtWidgets/QMessageBox>
 
 #if defined(WZ_OS_WIN)
 #  include <shlobj.h> /* For SHGetFolderPath */
@@ -35,11 +35,9 @@
 #endif // WZ_OS_WIN
 
 #include "lib/framework/input.h"
-#include "lib/framework/frameint.h"
 #include "lib/framework/physfs_ext.h"
 #include "lib/exceptionhandler/exceptionhandler.h"
 #include "lib/exceptionhandler/dumpinfo.h"
-#include "lib/framework/wzfs.h"
 
 #include "lib/sound/playlist.h"
 #include "lib/gamelib/gtime.h"
@@ -141,22 +139,6 @@ static GS_GAMEMODE gameStatus = GS_TITLE_SCREEN;
 // Status of the gameloop
 static int gameLoopStatus = 0;
 static FOCUS_STATE focusState = FOCUS_IN;
-
-class PhysicsEngineHandler : public QAbstractFileEngineHandler
-{
-public:
-	QAbstractFileEngine *create(const QString &fileName) const;
-};
-
-inline QAbstractFileEngine *PhysicsEngineHandler::create(const QString &fileName) const
-{
-	if (fileName.toLower().startsWith("wz::"))
-	{
-		QString newPath = fileName;
-		return new PhysicsFileSystem(newPath.remove(0, 4));
-	}
-	return NULL;
-}
 
 extern void debug_callback_stderr( void**, const char * );
 extern void debug_callback_win32debug( void**, const char * );
@@ -419,12 +401,24 @@ static bool getCurrentDir(char * const dest, size_t const size)
 static void getPlatformUserDir(char * const tmpstr, size_t const size)
 {
 #if defined(WZ_OS_WIN)
+//  When WZ_PORTABLE is passed, that means we want the config directory at the same location as the program file
+	DWORD dwRet;
 	wchar_t tmpWStr[MAX_PATH];
+#ifndef WZ_PORTABLE
 	if ( SUCCEEDED( SHGetFolderPathW( NULL, CSIDL_PERSONAL|CSIDL_FLAG_CREATE, NULL, SHGFP_TYPE_CURRENT, tmpWStr ) ) )
 	{
+#else
+	if (dwRet = GetCurrentDirectoryW(MAX_PATH, tmpWStr))
+	{
+		if(dwRet > MAX_PATH)
+		{
+			debug(LOG_FATAL, "Buffer exceeds maximum path to create directory. Exiting.");
+			exit(1);
+		}
+#endif
 		if (WideCharToMultiByte(CP_UTF8, 0, tmpWStr, -1, tmpstr, size, NULL, NULL) == 0)
 		{
-			debug(LOG_ERROR, "Encoding conversion error.");
+			debug(LOG_FATAL, "Config directory encoding conversion error.");
 			exit(1);
 		}
 		strlcat(tmpstr, PHYSFS_getDirSeparator(), size);
@@ -1074,7 +1068,6 @@ int realmain(int argc, char *argv[])
 	{
 		return EXIT_FAILURE;
 	}
-	QTextCodec::setCodecForCStrings(QTextCodec::codecForName("UTF-8"));	// make Qt treat all C strings in Warzone as UTF-8
 
 	setupExceptionHandler(utfargc, utfargv, version_getFormattedVersionString());
 
@@ -1146,8 +1139,6 @@ int realmain(int argc, char *argv[])
 	war_SetDefaultStates();
 
 	debug(LOG_MAIN, "initializing");
-
-	PhysicsEngineHandler engine;	// register abstract physfs filesystem
 
 	loadConfig();
 
@@ -1234,7 +1225,7 @@ int realmain(int argc, char *argv[])
 		}
 	}
 
-	if (!wzMain2())
+	if (!wzMain2(war_getFSAA(), war_getFullscreen(), war_GetVsync()))
 	{
 		return EXIT_FAILURE;
 	}
@@ -1247,6 +1238,14 @@ int realmain(int argc, char *argv[])
 
 	debug(LOG_MAIN, "Final initialization");
 	if (!frameInitialise())
+	{
+		return EXIT_FAILURE;
+	}
+	if (!screenInitialise())
+	{
+		return EXIT_FAILURE;
+	}
+	if (!pie_LoadShaders())
 	{
 		return EXIT_FAILURE;
 	}

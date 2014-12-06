@@ -577,6 +577,60 @@ Vector3i cameraToHome(UDWORD player,bool scroll)
 	return res;
 }
 
+static void recvSyncRequest(NETQUEUE queue)
+{
+	int32_t req_id, x, y, obj_id, obj_id2, player_id, player_id2;
+	BASE_OBJECT *psObj = NULL, *psObj2 = NULL;
+
+	NETbeginDecode(queue, GAME_SYNC_REQUEST);
+		NETint32_t(&req_id);
+		NETint32_t(&x);
+		NETint32_t(&y);
+		NETint32_t(&obj_id);
+		NETint32_t(&player_id);
+		NETint32_t(&obj_id2);
+		NETint32_t(&player_id2);
+	NETend();
+
+	syncDebug("sync request received from%d req_id%d x%u y%u %obj1 %obj2", queue.index, req_id, x, y, obj_id, obj_id2);
+	if (obj_id)
+	{
+		psObj = IdToPointer(obj_id, player_id);
+	}
+	if (obj_id2)
+	{
+		psObj2 = IdToPointer(obj_id2, player_id2);
+	}
+	triggerEventSyncRequest(queue.index, req_id, x, y, psObj, psObj2);
+}
+
+static void sendObj(BASE_OBJECT *psObj)
+{
+	if (psObj)
+	{
+		int32_t obj_id = psObj->id;
+		int32_t player = psObj->player;
+		NETint32_t(&obj_id);
+		NETint32_t(&player);
+	}
+	else
+	{
+		int32_t dummy = 0;
+		NETint32_t(&dummy);
+		NETint32_t(&dummy);
+	}
+}
+
+void sendSyncRequest(int32_t req_id, int32_t x, int32_t y, BASE_OBJECT *psObj, BASE_OBJECT *psObj2)
+{
+	NETbeginEncode(NETgameQueue(selectedPlayer), GAME_SYNC_REQUEST);
+		NETint32_t(&req_id);
+		NETint32_t(&x);
+		NETint32_t(&y);
+		sendObj(psObj);
+		sendObj(psObj2);
+	NETend();
+}
 
 // ////////////////////////////////////////////////////////////////////////////
 // ////////////////////////////////////////////////////////////////////////////
@@ -616,6 +670,9 @@ bool recvMessage(void)
 				break;
 			case NET_BEACONMSG:					//beacon (blip) message
 				recvBeacon(queue);
+				break;
+			case GAME_SYNC_REQUEST:
+				recvSyncRequest(queue);
 				break;
 			case GAME_DROIDDISEMBARK:
 				recvDroidDisEmbark(queue);           //droid has disembarked from a Transporter
@@ -826,6 +883,7 @@ void HandleBadParam(const char *msg, const int from, const int actual)
 		kickPlayer(actual, buf, KICK_TYPE);
 	}
 }
+
 // ////////////////////////////////////////////////////////////////////////////
 // Research Stuff. Nat games only send the result of research procedures.
 bool SendResearch(uint8_t player, uint32_t index, bool trigger)
@@ -1100,7 +1158,7 @@ bool sendTextMessage(const char *pStr, bool all, uint32_t from)
 	// This is for local display
 	if (from == selectedPlayer)
 	{
-		printchatmsg(normal ? curStr : display, from);
+		printchatmsg(curStr, from);
 	}
 
 	triggerEventChat(from, from, pStr); // send to self
@@ -1710,6 +1768,24 @@ bool recvMapFileData(NETQUEUE queue)
 		{
 			return false;
 		}
+
+		LEVEL_DATASET *mapData = levFindDataSet(game.map, &game.hash);
+		if ( mapData && CheckForMod(mapData->realFileName))
+		{
+			char buf[256];
+			if (game.isMapMod)
+			{
+				ssprintf(buf, _("Warning, this is a map-mod, it could alter normal gameplay."));
+			}
+			else
+			{
+				ssprintf(buf, _("Warning, HOST has altered the game code, and can't be trusted!"));
+			}
+			addConsoleMessage(buf,  DEFAULT_JUSTIFY, NOTIFY_MESSAGE);
+			game.isMapMod = true;
+			widgReveal(psWScreen, MULTIOP_MAP_MOD);
+		}
+
 		loadMapPreview(false);
 		return true;
 	}
@@ -1730,7 +1806,7 @@ UDWORD msgStackPush(SDWORD CBtype, SDWORD plFrom, SDWORD plTo, const char *tStr,
 {
 	debug(LOG_WZ, "msgStackPush: pushing message type %d to pos %d", CBtype, msgStackPos + 1);
 
-	if (msgStackPos >= MAX_MSG_STACK)
+	if (msgStackPos + 1 >= MAX_MSG_STACK)
 	{
 		debug(LOG_ERROR, "msgStackPush() - stack full");
 		return false;

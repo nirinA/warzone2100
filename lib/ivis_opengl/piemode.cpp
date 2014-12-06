@@ -34,7 +34,6 @@
 #include "lib/ivis_opengl/piestate.h"
 #include "lib/ivis_opengl/piemode.h"
 #include "piematrix.h"
-#include "lib/ivis_opengl/ivi.h"
 #include "lib/ivis_opengl/piefunc.h"
 #include "lib/ivis_opengl/tex.h"
 #include "lib/ivis_opengl/pieclip.h"
@@ -96,6 +95,7 @@ void pie_ScreenFlip(int clearMode)
 
 	screenDoDumpToDiskIfRequired();
 	wzScreenFlip();
+	wzPerfFrame();
 	if (clearMode & CLEAR_OFF_AND_NO_BUFFER_DOWNLOAD)
 	{
 		return;

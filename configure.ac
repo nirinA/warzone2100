@@ -9,13 +9,11 @@ AC_SUBST([XZ_OPT], ["-6"])
 AC_CONFIG_MACRO_DIR([m4])
 AC_CONFIG_SRCDIR([lib/framework/frame.cpp])
 
-
 # HACK
 # Workaround stupid autoconf CFLAGS default
 # (Bash considers set but empty variables different from null for the ${VAR:+alt} operator)
-CFLAGS="${CFLAGS}"
-CXXFLAGS="${CXXFLAGS}"
-
+CFLAGS="${CFLAGS} -fPIC"
+CXXFLAGS="${CXXFLAGS} -fPIC -std=c++11"
 
 # Make cross compilation options available in --help
 AC_CANONICAL_HOST
@@ -91,22 +89,22 @@ AM_CONDITIONAL([BACKEND_SDL], test "$backend" = "sdl")
 # Check for Qt
 if test "$backend" = "qt"; then
 	AC_MSG_RESULT([Qt])
-	PKG_CHECK_MODULES(QT4, QtCore QtGui QtOpenGL QtNetwork QtScript,,[:])
+	PKG_CHECK_MODULES(QT5, Qt5Core Qt5Gui Qt5Widgets Qt5Script Qt5OpenGL,,[:])
 else
 	AC_MSG_RESULT([SDL])
-	PKG_CHECK_MODULES(QT4, QtCore QtGui QtNetwork QtScript,,[:])
+	PKG_CHECK_MODULES(QT5, Qt5Core Qt5Gui Qt5Widgets Qt5Script,,[:])
 fi
 if test "$pkg_failed" = "yes" ; then
-	AC_MSG_ERROR([Qt not found - required!])
+	AC_MSG_ERROR([Qt 5 not found - required!])
 fi
-QT4_INCLUDES=$QT4_FRONTEND_CFLAGS
-QT4_LDFLAGS=$QT4_FRONTEND_LIBS
-QT4_LIB=$QT4_FRONTEND_LIBS
-QT4_VERSION=`$PKG_CONFIG --modversion QtCore`
-AC_SUBST(QT4_VERSION)
-AC_PATH_PROGS(MOC4, [moc-qt4 moc])
-AC_PATH_PROGS(UIC4, [uic-qt4 uic])
-AC_PATH_PROGS(RCC4, [rcc-qt4 rcc])
+QT5_INCLUDES=$QT5_FRONTEND_CFLAGS
+QT5_LDFLAGS=$QT5_FRONTEND_LIBS
+QT5_LIB=$QT5_FRONTEND_LIBS
+QT5_VERSION=`$PKG_CONFIG --modversion Qt5Core`
+AC_SUBST(QT5_VERSION)
+AC_PATH_PROGS(MOC5, [moc-qt5 moc])
+AC_PATH_PROGS(UIC5, [uic-qt5 uic])
+AC_PATH_PROGS(RCC5, [rcc-qt5 rcc])
 
 # Check for compiler
 case ${CC} in
@@ -228,6 +226,15 @@ AM_CONDITIONAL(INSTALLER, test "x$enable_installer" = "xyes")
 AC_MSG_CHECKING([whether to build NSIS installer])
 AC_MSG_RESULT([${enable_installer}])
 
+# windows only option at this time
+AC_ARG_ENABLE([portable],
+	AS_HELP_STRING([--enable-portable], [Build portable version of Warzone (windows ONLY!) [no]]),
+	[ enable_portable="${enableval}" ], [ enable_portable=no ])
+AS_IF([test "x$enable_portable" = "xyes"],[
+	AC_DEFINE([WZ_PORTABLE], 1, [Makes builds become portable (windows ONLY)])
+])
+AM_CONDITIONAL(PORTABLE, test $enable_portable = yes)
+
 AC_ARG_ENABLE([static],
 	AS_HELP_STRING([--enable-static], [Link statically [no]]),
 	[ enable_static=${enableval} ], [ enable_static=no ])
@@ -258,7 +265,7 @@ AX_C_CHECK_FLAG([-Werror -Wno-enum-compare], , , CFLAGS_IGNORE_WARNINGS="${CFLAG
 WZ_CPPFLAGS="${WZ_CPPFLAGS} -D__STDC_FORMAT_MACROS -D__STDC_LIMIT_MACROS"
 
 # zlib
-LDFLAGS="-lz ${LDFLAGS}"
+LDFLAGS="-lz ${LDFLAGS} -fPIC"
 
 if test "x$enable_warnings" = "xyes" ; then
 	# Only disable -Werror for the warning.
@@ -277,30 +284,40 @@ if test "x$enable_debug" = "xyes" ; then
 		WZ_CXXFLAGS="${WZ_CXXFLAGS} -O0 -g -Wcheck -Werror"
 		WZ_CPPFLAGS="${WZ_CPPFLAGS} -DDEBUG"
 	else
-		WZ_CFLAGS="${WZ_CFLAGS} -O0 -g -Werror ${WZ_WARNINGS_GCC_C}"
-		WZ_CXXFLAGS="${WZ_CXXFLAGS} -O0 -g -Werror ${WZ_WARNINGS_GCC_CXX}"
+		# -ggdb is very useful when running the linux perf tool
+		WZ_CFLAGS="${WZ_CFLAGS} -O0 -ggdb -Werror ${WZ_WARNINGS_GCC_C}"
+		WZ_CXXFLAGS="${WZ_CXXFLAGS} -O0 -ggdb -Werror ${WZ_WARNINGS_GCC_CXX}"
 		WZ_C99FLAGS="${WZ_C99FLAGS} -Wno-declaration-after-statement"
 		WZ_CPPFLAGS="${WZ_CPPFLAGS} -DDEBUG"
 	fi
+# debugging with optimizations for gcc or clang
 elif test "x$enable_debug" = "xoptimised" ; then
-	WZ_CFLAGS="${WZ_CFLAGS} -O2 -g -Werror ${WZ_WARNINGS_GCC_C}"
-	WZ_CXXFLAGS="${WZ_CXXFLAGS} -O2 -g -Werror ${WZ_WARNINGS_GCC_CXX}"
+	WZ_CFLAGS="${WZ_CFLAGS} -O2 -ggdb -fno-omit-frame-pointer -Werror ${WZ_WARNINGS_GCC_C}"
+	WZ_CXXFLAGS="${WZ_CXXFLAGS} -O2 -ggdb -fno-omit-frame-pointer -Werror ${WZ_WARNINGS_GCC_CXX}"
 	WZ_C99FLAGS="${WZ_C99FLAGS} -Wno-declaration-after-statement"
 	WZ_CPPFLAGS="${WZ_CPPFLAGS} -DDEBUG"
+# debug build while ignoring warnings for gcc or clang
 elif test "x$enable_debug" = "xrelaxed" ; then
-	WZ_CFLAGS="${WZ_CFLAGS} -g -O0 ${WZ_WARNINGS_GCC_C}"
-	WZ_CXXFLAGS="${WZ_CXXFLAGS} -g -O0 ${WZ_WARNINGS_GCC_CXX}"
+	WZ_CFLAGS="${WZ_CFLAGS} -ggdb -O0 ${WZ_WARNINGS_GCC_C}"
+	WZ_CXXFLAGS="${WZ_CXXFLAGS} -ggdb -O0 ${WZ_WARNINGS_GCC_CXX}"
 	WZ_CPPFLAGS="${WZ_CPPFLAGS} -DDEBUG"
+# profiling builds using gprof (probably a better idea to use perf, if you can)
 elif test "x$enable_debug" = "xdebugprofile" ; then
-	WZ_CFLAGS="${WZ_CFLAGS} -g -O0 -pg ${WZ_WARNINGS_GCC_C}"
-	WZ_CXXFLAGS="${WZ_CXXFLAGS} -g -O0 -pg ${WZ_WARNINGS_GCC_CXX}"
+	WZ_CFLAGS="${WZ_CFLAGS} -ggdb -O0 -pg ${WZ_WARNINGS_GCC_C}"
+	WZ_CXXFLAGS="${WZ_CXXFLAGS} -ggdb -O0 -pg ${WZ_WARNINGS_GCC_CXX}"
 	WZ_CPPFLAGS="${WZ_CPPFLAGS} -DDEBUG"
 	LDFLAGS="-pg ${LDFLAGS}"
 elif test "x$enable_debug" = "xprofile" ; then
-	WZ_CFLAGS="${WZ_CFLAGS} -g -Os -pg ${WZ_WARNINGS_GCC_C}"
-	WZ_CXXFLAGS="${WZ_CXXFLAGS} -g -Os -pg ${WZ_WARNINGS_GCC_CXX}"
+	WZ_CFLAGS="${WZ_CFLAGS} -ggdb -Os -fno-omit-frame-pointer -pg ${WZ_WARNINGS_GCC_C}"
+	WZ_CXXFLAGS="${WZ_CXXFLAGS} -ggdb -Os -fno-omit-frame-pointer -pg ${WZ_WARNINGS_GCC_CXX}"
 	WZ_CPPFLAGS="${WZ_CPPFLAGS} -DNDEBUG"
 	LDFLAGS="-pg ${LDFLAGS}"
+elif test "x$enable_debug" = "xsanitize" ; then
+	WZ_CFLAGS="${WZ_CFLAGS} -ggdb -Os -fno-omit-frame-pointer ${WZ_WARNINGS_GCC_C} -Werror -fsanitize=undefined"
+	WZ_CXXFLAGS="${WZ_CXXFLAGS} -ggdb -Os -fno-omit-frame-pointer ${WZ_WARNINGS_GCC_CXX} -Werror -fsanitize=undefined"
+	WZ_CPPFLAGS="${WZ_CPPFLAGS} -DDEBUG"
+	LDFLAGS="${LDFLAGS} -fsanitize=undefined"
+# normal, non-debug build
 else
 	WZ_CFLAGS="${WZ_CFLAGS} -g ${WZ_WARNINGS_GCC_C}"
 	WZ_CXXFLAGS="${WZ_CXXFLAGS} -g ${WZ_WARNINGS_GCC_CXX}"
@@ -317,6 +334,14 @@ AC_DEFINE_UNQUOTED([PACKAGE_DISTRIBUTOR], ["${with_distributor}"], [Name of dist
 
 AC_ARG_WITH([makensis],
 	AS_HELP_STRING([--with-makensis], [Path to makensis]))
+
+AC_ARG_WITH([videos],
+	AS_HELP_STRING([--with-videos], [Install videos with the portable version of Warzone (windows ONLY!) [no]]),
+	[ with_videos="${withval}" ], [ with_videos=no ])
+#AS_IF([test "x$with_videos" = "xyes"],[
+#	AC_DEFINE([WZ_PORTABLE], 1, [Makes builds become portable (windows ONLY)])
+#])
+AM_CONDITIONAL(VIDEOS, test $with_videos = yes)
 
 AC_ARG_WITH([installer_compression],
 	AS_HELP_STRING([--with-installer-compression], [Compression method to use when building NSIS [lzma]]),
@@ -494,6 +519,17 @@ AS_IF([test -z "$A2X" -o -z "$WKHTMLTOPDF"],[
 	AC_MSG_WARN([a2x (asciidoc) or wkhtmltopdf not found, can't convert documentation. This doesn't affect building the game,
 		but means that things like "make dist" and building a Windows installer will fail.])
 ])
+
+AS_IF([test "x$enable_portable" = "xyes"],[
+	AC_MSG_NOTICE()
+	AC_MSG_NOTICE([*** Creating Portable version of Warzone (this options only affects Windows builds!) ***])
+])
+AS_IF([test "x$with_videos" = "xyes"],[
+	AC_MSG_NOTICE()
+	AC_MSG_NOTICE([*** Creating Portable version of Warzone WITH VIDEOS (this options only affects Windows builds!) ***])
+])
+
+
 
 AC_MSG_NOTICE()
 AC_MSG_NOTICE(Backend used: ${backend})

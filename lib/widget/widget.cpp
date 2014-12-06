@@ -23,11 +23,11 @@
 
 #include "lib/framework/frame.h"
 #include "lib/framework/string_ext.h"
-#include "lib/framework/frameint.h"
 #include "lib/framework/utf.h"
 #include "lib/ivis_opengl/textdraw.h"
 #include "lib/ivis_opengl/pieblitfunc.h"
 #include "lib/ivis_opengl/piestate.h"
+#include "lib/ivis_opengl/screen.h"
 #include "lib/gamelib/gtime.h"
 
 #include "widget.h"
@@ -119,6 +119,7 @@ WIDGET::WIDGET(W_INIT const *init, WIDGET_TYPE type)
 	, screenPointer(nullptr)
 	, parentWidget(NULL)
 	, dim(init->x, init->y, init->width, init->height)
+	, dirty(true)
 {}
 
 WIDGET::WIDGET(WIDGET *parent, WIDGET_TYPE type)
@@ -132,6 +133,7 @@ WIDGET::WIDGET(WIDGET *parent, WIDGET_TYPE type)
 	, screenPointer(nullptr)
 	, parentWidget(NULL)
 	, dim(0, 0, 1, 1)
+	, dirty(true)
 {
 	parent->attach(this);
 }
@@ -164,6 +166,7 @@ void WIDGET::setGeometry(QRect const &r)
 	}
 	dim = r;
 	geometryChanged();
+	dirty = true;
 }
 
 void WIDGET::attach(WIDGET *widget)
@@ -775,6 +778,10 @@ void WIDGET::displayRecursive(int xOffset, int yOffset)
 		col.byte.r = 128 + iSinSR(realTime, 2000, 127); col.byte.g = 128 + iSinSR(realTime + 667, 2000, 127); col.byte.b = 128 + iSinSR(realTime + 1333, 2000, 127); col.byte.a = 128;
 		iV_Box(xOffset + x(), yOffset + y(), xOffset + x() + width() - 1, yOffset + y() + height() - 1, col);
 	}
+	else if (displayFunction)
+	{
+		displayFunction(this, xOffset, yOffset);
+	}
 	else
 	{
 		// Display widget.
@@ -815,8 +822,6 @@ void WIDGET::displayRecursive(int xOffset, int yOffset)
 		psCurr->displayRecursive(xOffset, yOffset);
 	}
 }
-
-
 
 /* Display the screen's widgets in their current state
  * (Call after calling widgRunScreen, this allows the input
@@ -874,31 +879,27 @@ void WidgSetAudio(WIDGET_AUDIOCALLBACK Callback, SWORD HilightID, SWORD ClickedI
 	ClickedAudioID = ClickedID;
 }
 
-
 WIDGET_AUDIOCALLBACK WidgGetAudioCallback(void)
 {
 	return AudioCallback;
 }
-
 
 SWORD WidgGetHilightAudioID(void)
 {
 	return HilightAudioID;
 }
 
-
 SWORD WidgGetClickedAudioID(void)
 {
 	return ClickedAudioID;
 }
 
-
-void	setWidgetsStatus(bool var)
+void setWidgetsStatus(bool var)
 {
 	bWidgetsActive = var;
 }
 
-bool	getWidgetsStatus(void)
+bool getWidgetsStatus()
 {
-	return(bWidgetsActive);
+	return bWidgetsActive;
 }

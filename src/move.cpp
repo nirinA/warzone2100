@@ -104,9 +104,6 @@
 #define EXTRA_PRECISION                         (1 << EXTRA_BITS)
 
 
-static uint32_t oilTimer = 0;
-static unsigned drumCount = 0;
-
 /* Function prototypes */
 static void	moveUpdatePersonModel(DROID *psDroid, SDWORD speed, uint16_t direction);
 
@@ -128,16 +125,6 @@ const char *moveDescription(MOVE_STATUS status)
 	return "Error";	// satisfy compiler
 }
 
-/** Initialise the movement system
- */
-bool moveInitialise(void)
-{
-	oilTimer = 0;
-	drumCount = 0;
-
-	return true;
-}
-
 /** Set a target location in world coordinates for a droid to move to
  *  @return true if the routing was successful, if false then the calling code
  *          should not try to route here again for a while
@@ -150,7 +137,7 @@ static bool moveDroidToBase(DROID *psDroid, UDWORD x, UDWORD y, bool bFormation,
 	CHECK_DROID(psDroid);
 
 	// in multiPlayer make Transporter move like the vtols
-	if ((psDroid->droidType == DROID_TRANSPORTER || psDroid->droidType == DROID_SUPERTRANSPORTER) && game.maxPlayers == 0)
+	if (isTransporter(psDroid) && game.maxPlayers == 0)
 	{
 		fpathSetDirectRoute(psDroid, x, y);
 		psDroid->sMove.Status = MOVENAVIGATE;
@@ -158,7 +145,7 @@ static bool moveDroidToBase(DROID *psDroid, UDWORD x, UDWORD y, bool bFormation,
 		return true;
 	}
 	// NOTE: While Vtols can fly, then can't go through things, like the transporter.
-	else if ((game.maxPlayers > 0 && (psDroid->droidType == DROID_TRANSPORTER || psDroid->droidType == DROID_SUPERTRANSPORTER)))
+	else if ((game.maxPlayers > 0 && isTransporter(psDroid)))
 	{
 		fpathSetDirectRoute(psDroid, x, y);
 		retVal = FPR_OK;
@@ -409,7 +396,7 @@ void updateDroidOrientation(DROID *psDroid)
 	const int d = 20;
 	int32_t vX, vY;
 
-	if(psDroid->droidType == DROID_PERSON || cyborgDroid(psDroid) || psDroid->droidType == DROID_TRANSPORTER || psDroid->droidType == DROID_SUPERTRANSPORTER
+	if (psDroid->droidType == DROID_PERSON || cyborgDroid(psDroid) || isTransporter(psDroid)
 		|| isFlying(psDroid))
 	{
 		/* The ground doesn't affect the pitch/roll of these droids*/
@@ -1071,7 +1058,7 @@ static void moveCalcDroidSlide(DROID *psDroid, int *pmx, int *pmy)
 		}
 		if (psObj->type == OBJ_DROID)
 		{
-			if (((DROID *)psObj)->droidType == DROID_TRANSPORTER || ((DROID *)psObj)->droidType == DROID_SUPERTRANSPORTER)
+			if (isTransporter((DROID *)psObj))
 			{
 				// ignore transporters
 				continue;
@@ -1199,7 +1186,7 @@ static Vector2i moveGetObstacleVector(DROID *psDroid, Vector2i dest)
 			continue;
 		}
 
-		if ((psObstacle->droidType == DROID_TRANSPORTER || psObstacle->droidType == DROID_SUPERTRANSPORTER) ||
+		if (isTransporter(psObstacle) ||
 		    (psObstacle->droidType == DROID_PERSON &&
 		     psObstacle->player != psDroid->player))
 		{
@@ -1254,7 +1241,7 @@ static Vector2i moveGetObstacleVector(DROID *psDroid, Vector2i dest)
 		numObst += 1;
 	}
 
-	if (dir == Vector2i(0, 0))
+	if (dir == Vector2i(0, 0) || numObst == 0)
 	{
 		return dest;
 	}
@@ -1288,7 +1275,7 @@ static uint16_t moveGetDirection(DROID *psDroid)
 	Vector2i dest = target - src;
 
 	// Transporters don't need to avoid obstacles, but everyone else should
-	if (psDroid->droidType != DROID_TRANSPORTER && psDroid->droidType != DROID_SUPERTRANSPORTER)
+	if (!isTransporter(psDroid))
 	{
 		dest = moveGetObstacleVector(psDroid, dest);
 	}
@@ -1546,8 +1533,8 @@ static void moveUpdateDroidPos(DROID *psDroid, int32_t dx, int32_t dy)
 	if ( worldOnMap( psDroid->pos.x, psDroid->pos.y ) == false )
 	{
 		/* transporter going off-world will trigger next map, and is ok */
-		ASSERT(psDroid->droidType == DROID_TRANSPORTER || psDroid->droidType == DROID_SUPERTRANSPORTER, "droid trying to move off the map!");
-		if (psDroid->droidType != DROID_TRANSPORTER && psDroid->droidType != DROID_SUPERTRANSPORTER)
+		ASSERT(isTransporter(psDroid), "droid trying to move off the map!");
+		if (!isTransporter(psDroid))
 		{
 			/* dreadful last-ditch crash-avoiding hack - sort this! - GJ */
 			destroyDroid(psDroid, gameTime);
@@ -1557,7 +1544,7 @@ static void moveUpdateDroidPos(DROID *psDroid, int32_t dx, int32_t dy)
 
 	// lovely hack to keep transporters just on the map
 	// two weeks to go and the hacks just get better !!!
-	if (psDroid->droidType == DROID_TRANSPORTER || psDroid->droidType == DROID_SUPERTRANSPORTER)
+	if (isTransporter(psDroid))
 	{
 		if (psDroid->pos.x == 0)
 		{
@@ -1739,7 +1726,7 @@ static void moveUpdatePersonModel(DROID *psDroid, SDWORD speed, uint16_t directi
 static void moveAdjustVtolHeight(DROID * psDroid, int32_t iMapHeight)
 {
 	int32_t	iMinHeight, iMaxHeight, iLevelHeight;
-	if ((psDroid->droidType == DROID_TRANSPORTER || psDroid->droidType == DROID_SUPERTRANSPORTER) && !bMultiPlayer)
+	if (isTransporter(psDroid) && !bMultiPlayer)
 	{
 		iMinHeight   = 2*VTOL_HEIGHT_MIN;
 		iLevelHeight = 2*VTOL_HEIGHT_LEVEL;
@@ -1802,7 +1789,7 @@ static void moveUpdateVtolModel(DROID *psDroid, SDWORD speed, uint16_t direction
 
 	moveCheckFinalWaypoint( psDroid, &speed );
 
-	if (psDroid->droidType == DROID_TRANSPORTER || psDroid->droidType == DROID_SUPERTRANSPORTER)
+	if (isTransporter(psDroid))
 	{
 		moveUpdateDroidDirection(psDroid, &speed, direction, DEG(psPropStats->spinAngle), spinSpeed, turnSpeed, &iDroidDir);
 	}
@@ -1821,7 +1808,7 @@ static void moveUpdateVtolModel(DROID *psDroid, SDWORD speed, uint16_t direction
 	moveGetDroidPosDiffs( psDroid, &dx, &dy );
 
 	/* set slide blocking tile for map edge */
-	if ( psDroid->droidType != DROID_TRANSPORTER && psDroid->droidType != DROID_SUPERTRANSPORTER)
+	if (!isTransporter(psDroid))
 	{
 		moveCalcBlockingSlide(psDroid, &dx, &dy, direction, &slideDir);
 	}
@@ -1926,7 +1913,7 @@ bool moveCheckDroidMovingAndVisible( void *psObj )
 
 	/* check for dead, not moving or invisible to player */
 	if ( psDroid->died || moveDroidStopped( psDroid, 0 ) ||
-		 ((psDroid->droidType == DROID_TRANSPORTER || psDroid->droidType == DROID_SUPERTRANSPORTER) && psDroid->order.type == DORDER_NONE) ||
+		 (isTransporter(psDroid) && psDroid->order.type == DORDER_NONE) ||
 		 !(psDroid->visible[selectedPlayer])                                )
 	{
 		psDroid->iAudioID = NO_SOUND;
@@ -1957,7 +1944,7 @@ static void movePlayDroidMoveAudio( DROID *psDroid )
 		{
 			iAudioID = ID_SOUND_TREAD;
 		}
-		else if (psDroid->droidType == DROID_TRANSPORTER || psDroid->droidType == DROID_SUPERTRANSPORTER)
+		else if (isTransporter(psDroid))
 		{
 			iAudioID = ID_SOUND_BLIMP_FLIGHT;
 		}
@@ -2025,7 +2012,7 @@ static void movePlayAudio( DROID *psDroid, bool bStarted, bool bStoppedBefore, S
 			movePlayDroidMoveAudio( psDroid );
 			return;
 		}
-		else if (psDroid->droidType == DROID_TRANSPORTER || psDroid->droidType == DROID_SUPERTRANSPORTER)
+		else if (isTransporter(psDroid))
 		{
 			iAudioID = ID_SOUND_BLIMP_TAKE_OFF;
 		}
@@ -2040,7 +2027,7 @@ static void movePlayAudio( DROID *psDroid, bool bStarted, bool bStoppedBefore, S
 				(psPropType->shutDownID != NO_SOUND) )
 	{
 		/* play stop audio */
-		if (psDroid->droidType == DROID_TRANSPORTER || psDroid->droidType == DROID_SUPERTRANSPORTER)
+		if (isTransporter(psDroid))
 		{
 			iAudioID = ID_SOUND_BLIMP_LAND;
 		}
@@ -2077,21 +2064,6 @@ static bool pickupOilDrum(int toPlayer, int fromPlayer)
 		CONPRINTF(ConsoleString, (ConsoleString, _("You found %u power in an oil drum."), OILDRUM_POWER));
 	}
 
-	// fromPlayer == ANYPLAYER seems to mean that the drum was not pre-placed on the map.
-	if (bMultiPlayer && fromPlayer == ANYPLAYER)
-	{
-		// when player finds oil, we init the timer, and flag that we need a drum
-		if (!oilTimer)
-		{
-			oilTimer = gameTime;
-		}
-		// if player finds more than one drum (before timer expires), then we tack on ~50 sec to timer.
-		if (drumCount++ == 0)
-		{
-			oilTimer += GAME_TICKS_PER_SEC * 50;
-		}
-	}
-
 	return true;
 }
 
@@ -2100,7 +2072,7 @@ static bool pickupOilDrum(int toPlayer, int fromPlayer)
 static void checkLocalFeatures(DROID *psDroid)
 {
 	// NOTE: Why not do this for AI units also?
-	if ((!isHumanPlayer(psDroid->player) && psDroid->order.type != DORDER_RECOVER) || isVtolDroid(psDroid))  // VTOLs can't pick up features!
+	if ((!isHumanPlayer(psDroid->player) && psDroid->order.type != DORDER_RECOVER) || isVtolDroid(psDroid) || isTransporter(psDroid))  // VTOLs or transporters can't pick up features!
 	{
 		return;
 	}
@@ -2140,14 +2112,6 @@ static void checkLocalFeatures(DROID *psDroid)
 		turnOffMultiMsg(true);
 		removeFeature((FEATURE *)psObj);  // remove artifact+.
 		turnOffMultiMsg(false);
-	}
-
-	// once they found a oil drum, we then wait ~600 secs before we pop up new one(s).
-	if (oilTimer + GAME_TICKS_PER_SEC * 600u < gameTime && drumCount > 0)
-	{
-		addOilDrum(drumCount);
-		oilTimer = 0;
-		drumCount = 0;
 	}
 }
 
